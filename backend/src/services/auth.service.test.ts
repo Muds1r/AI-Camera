@@ -161,6 +161,15 @@ describe('refresh token rotation', () => {
     expect(state().tokens).toHaveLength(0);
   });
 
+  it('rejects a deactivated account when the password is correct', async () => {
+    await addUser({ is_active: false });
+    await expect(login('ada@example.com', 'correct-password')).resolves.toMatchObject({
+      ok: false,
+      reason: 'inactive',
+    });
+    expect(state().tokens).toHaveLength(0);
+  });
+
   it('rotates the refresh token and revokes the family when a used token is replayed', async () => {
     await addUser();
     const first = await login('ada@example.com', 'correct-password');

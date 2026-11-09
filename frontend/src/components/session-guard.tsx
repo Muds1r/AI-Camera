@@ -17,7 +17,7 @@ export function SessionGuard() {
     if (PUBLIC_PATHS.has(pathname)) return;
 
     let cancelled = false;
-    apiJson<{ user: { id: string } }>('/api/auth/me')
+    apiJson<{ user: { id: string } }>('/api/auth/me', undefined, { silent: true })
       .then(() => {
         if (cancelled) return;
       })

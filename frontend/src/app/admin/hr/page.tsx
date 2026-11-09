@@ -1,7 +1,13 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  buttonClass,
+  fieldClass,
+  formPanelClass,
+  cardClass,
+} from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
 import { Notice, Switch } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
@@ -86,10 +92,7 @@ export default function HrAccountsPage() {
   return (
     <PageFrame title="HR accounts" description="Only a Super Admin can create or deactivate HR.">
       <Notice error={error} message={message} />
-      <form
-        onSubmit={create}
-        className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-      >
+      <form onSubmit={create} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
         <input
           required
           className={fieldClass}
@@ -119,7 +122,7 @@ export default function HrAccountsPage() {
         {users.map((person) => (
           <li
             key={person.id}
-            className="border-line bg-paper flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
+            className={`${cardClass} flex items-center justify-between px-4 py-3 text-sm`}
           >
             <button
               type="button"
@@ -148,11 +151,8 @@ export default function HrAccountsPage() {
         ))}
       </ul>
       {selected ? (
-        <form
-          onSubmit={saveHr}
-          className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-        >
-          <h2 className="font-extrabold md:col-span-2">Update {selected.email}</h2>
+        <form onSubmit={saveHr} className={`${formPanelClass} mt-6 md:grid-cols-2`}>
+          <h2 className="text-ink text-sm font-medium md:col-span-2">Update {selected.email}</h2>
           <input
             className={fieldClass}
             value={selected.full_name}

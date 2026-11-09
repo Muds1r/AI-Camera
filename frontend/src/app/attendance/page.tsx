@@ -1,8 +1,22 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PageFrame, buttonClass, buttonSecondaryClass, fieldClass } from '@/components/page-frame';
-import { Badge, Notice, Stat } from '@/components/widgets';
+import {
+  PageFrame,
+  buttonClass,
+  buttonSecondaryClass,
+  fieldClass,
+  labelClass,
+} from '@/components/page-frame';
+import {
+  Badge,
+  MetricStrip,
+  Notice,
+  tableClass,
+  tableHeadClass,
+  tableRowClass,
+  tableWrapClass,
+} from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 interface AttendanceView {
@@ -38,12 +52,11 @@ export default function AttendancePage() {
 
   useEffect(() => {
     apiJson<{ user: { clock_enabled: boolean } }>('/api/users/me')
-      .then((data) => setClockEnabled(data.user.clock_enabled))
+      .then((res) => setClockEnabled(res.user.clock_enabled))
       .catch(() => undefined);
     load(month).catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
     );
-    // Month changes reload the history. The clock flag is read once with that load.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
@@ -61,73 +74,83 @@ export default function AttendancePage() {
 
   return (
     <PageFrame
-      title="My attendance"
-      description="Clock in once per day between 9:00 AM and 5:00 PM (optional clock out). HR can see your clock-in time on the team report."
+      title="Attendance"
+      description="Clock in once per day between 9:00 AM and 5:00 PM. HR can view your clock-in on the team report."
     >
       <Notice error={error} message={message} />
-      <input
-        className={`${fieldClass} mb-4 max-w-48`}
-        type="month"
-        value={month}
-        onChange={(event) => setMonth(event.target.value)}
-      />
-      {clockEnabled ? (
-        <div className="mb-4 flex gap-2">
-          <button
-            className={buttonClass}
-            type="button"
-            disabled={Boolean(data?.today?.clock_in)}
-            onClick={() => clock('/api/attendance/clock-in')}
-          >
-            {data?.today?.clock_in ? 'Clocked in today' : 'Clock in'}
-          </button>
-          <button
-            className={buttonSecondaryClass}
-            type="button"
-            onClick={() => clock('/api/attendance/clock-out')}
-          >
-            Clock out
-          </button>
+
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className={labelClass}>Month</label>
+          <input
+            className={`${fieldClass} w-40`}
+            type="month"
+            value={month}
+            onChange={(event) => setMonth(event.target.value)}
+          />
         </div>
-      ) : (
-        <p className="text-mute mb-4 text-sm">Clock in is not enabled for this account.</p>
-      )}
+        {clockEnabled ? (
+          <div className="flex gap-2 pb-0.5">
+            <button
+              className={buttonClass}
+              type="button"
+              disabled={Boolean(data?.today?.clock_in)}
+              onClick={() => clock('/api/attendance/clock-in')}
+            >
+              {data?.today?.clock_in ? 'Clocked in today' : 'Clock in'}
+            </button>
+            <button
+              className={buttonSecondaryClass}
+              type="button"
+              onClick={() => clock('/api/attendance/clock-out')}
+            >
+              Clock out
+            </button>
+          </div>
+        ) : (
+          <p className="text-mute text-sm">Clock in is not enabled for this account.</p>
+        )}
+      </div>
+
       {data ? (
         <>
-          <div className="mb-6 grid gap-4 sm:grid-cols-4">
-            <Stat label="Today" value={data.today?.status ?? 'Not clocked in'} />
-            <Stat label="Working days" value={data.summary.workingDays} />
-            <Stat
-              label="Sundays"
-              value={data.summary.sundays}
-              hint={`${data.summary.gazetted} gazetted · ${data.summary.generalOff} off`}
-            />
-            <Stat
-              label="Present / late / absent"
-              value={`${data.summary.present} / ${data.summary.late} / ${data.summary.absent}`}
-            />
-          </div>
-          <div className="border-line bg-paper overflow-hidden rounded-xl border shadow-sm">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-surface text-mute text-xs font-bold uppercase">
+          <MetricStrip
+            items={[
+              { label: 'Today', value: data.today?.status ?? 'Not clocked in' },
+              { label: 'Working days', value: data.summary.workingDays },
+              {
+                label: 'Sundays & holidays',
+                value: data.summary.sundays + data.summary.gazetted + data.summary.generalOff,
+                hint: `${data.summary.gazetted} gazetted · ${data.summary.generalOff} general off`,
+              },
+              {
+                label: 'Present / late / absent',
+                value: `${data.summary.present} / ${data.summary.late} / ${data.summary.absent}`,
+              },
+            ]}
+          />
+
+          <div className={tableWrapClass}>
+            <table className={tableClass}>
+              <thead className={tableHeadClass}>
                 <tr>
-                  <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">In</th>
-                  <th className="px-4 py-3">Out</th>
+                  <th className="px-4 py-2.5 font-medium">Date</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5 font-medium">In</th>
+                  <th className="px-4 py-2.5 font-medium">Out</th>
                 </tr>
               </thead>
               <tbody>
                 {data.records.map((row) => (
-                  <tr key={row.id} className="border-line border-t">
-                    <td className="px-4 py-3 font-bold">{row.work_date.slice(0, 10)}</td>
-                    <td className="px-4 py-3">
+                  <tr key={row.id} className={tableRowClass}>
+                    <td className="px-4 py-2.5">{row.work_date.slice(0, 10)}</td>
+                    <td className="px-4 py-2.5">
                       <Badge status={row.status} />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="text-mute px-4 py-2.5 tabular-nums">
                       {row.clock_in ? new Date(row.clock_in).toLocaleTimeString() : '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="text-mute px-4 py-2.5 tabular-nums">
                       {row.clock_out ? new Date(row.clock_out).toLocaleTimeString() : '—'}
                     </td>
                   </tr>

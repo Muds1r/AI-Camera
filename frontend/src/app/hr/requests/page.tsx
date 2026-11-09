@@ -5,6 +5,7 @@ import {
   PageFrame,
   buttonDangerClass,
   buttonSuccessClass,
+  cardClass,
   fieldClass,
   tabActiveClass,
   tabBarClass,
@@ -221,9 +222,9 @@ export default function ApprovalsPage() {
       ) : null}
       <ul className="space-y-2">
         {rows.map((row) => (
-          <li key={row.id} className="border-line bg-paper rounded-xl border p-4 text-sm shadow-sm">
+          <li key={row.id} className={`${cardClass} p-4 text-sm`}>
             <div className="flex items-center justify-between gap-3">
-              <p className="font-extrabold">{row.title}</p>
+              <p className="font-medium">{row.title}</p>
               <Badge status={row.status} />
             </div>
             <p className="text-mute mt-1">{row.detail}</p>

@@ -4,12 +4,23 @@ import { FormEvent, useEffect, useState } from 'react';
 import {
   PageFrame,
   buttonClass,
+  buttonSecondaryClass,
   fieldClass,
+  formPanelClass,
+  cardClass,
   tabActiveClass,
   tabBarClass,
   tabIdleClass,
 } from '@/components/page-frame';
-import { Badge, Notice, Stat } from '@/components/widgets';
+import {
+  Badge,
+  MetricStrip,
+  Notice,
+  tableClass,
+  tableHeadClass,
+  tableRowClass,
+  tableWrapClass,
+} from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 type Tab = 'team' | 'mine' | 'holidays';
@@ -142,11 +153,7 @@ export default function TeamAttendancePage() {
 
       {tab === 'team' ? (
         <>
-          <div className="mb-4 flex max-w-3xl flex-wrap gap-2">
-            <div className="max-w-xs">
-              <Stat label="Clocked in now" value={clockedIn} />
-            </div>
-          </div>
+          <MetricStrip items={[{ label: 'Clocked in now', value: clockedIn }]} />
           <div className="mb-4 flex flex-wrap gap-2">
             <input
               className={`${fieldClass} max-w-48`}
@@ -186,9 +193,9 @@ export default function TeamAttendancePage() {
               loadTeam(event.target.value).catch(() => undefined);
             }}
           />
-          <div className="border-line bg-paper overflow-hidden rounded-xl border shadow-sm">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-surface text-mute text-xs font-bold uppercase">
+          <div className={tableWrapClass}>
+            <table className={tableClass}>
+              <thead className={tableHeadClass}>
                 <tr>
                   <th className="px-4 py-3">Employee</th>
                   <th className="px-4 py-3">Date</th>
@@ -218,7 +225,7 @@ export default function TeamAttendancePage() {
                     return true;
                   })
                   .map((row) => (
-                    <tr key={row.id} className="border-line border-t">
+                    <tr key={row.id} className={tableRowClass}>
                       <td className="px-4 py-3 font-bold">
                         {row.user.full_name}
                         <span className="text-mute block font-medium">
@@ -253,35 +260,34 @@ export default function TeamAttendancePage() {
               {mine.today?.clock_in ? 'Clocked in today' : 'Clock in'}
             </button>
             <button
-              className="border-line rounded-md border px-4 py-2 text-sm font-bold"
+              className={buttonSecondaryClass}
               type="button"
               onClick={() => clock('/api/attendance/clock-out')}
             >
               Clock out
             </button>
           </div>
-          <div className="mb-6 grid gap-4 sm:grid-cols-4">
-            <Stat label="Today" value={mine.today?.status ?? 'Not clocked in'} />
-            <Stat label="Working days" value={mine.summary.workingDays} />
-            <Stat
-              label="Sundays"
-              value={mine.summary.sundays}
-              hint={`${mine.summary.gazetted} gazetted · ${mine.summary.generalOff} off`}
-            />
-            <Stat
-              label="Present / late / absent"
-              value={`${mine.summary.present} / ${mine.summary.late} / ${mine.summary.absent}`}
-            />
-          </div>
+          <MetricStrip
+            items={[
+              { label: 'Today', value: mine.today?.status ?? 'Not clocked in' },
+              { label: 'Working days', value: mine.summary.workingDays },
+              {
+                label: 'Sundays',
+                value: mine.summary.sundays,
+                hint: `${mine.summary.gazetted} gazetted · ${mine.summary.generalOff} off`,
+              },
+              {
+                label: 'Present / late / absent',
+                value: `${mine.summary.present} / ${mine.summary.late} / ${mine.summary.absent}`,
+              },
+            ]}
+          />
         </>
       ) : null}
 
       {tab === 'holidays' ? (
         <>
-          <form
-            onSubmit={saveHoliday}
-            className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-4"
-          >
+          <form onSubmit={saveHoliday} className={`${formPanelClass} mb-6 md:grid-cols-4`}>
             <input
               className={fieldClass}
               type="date"
@@ -312,7 +318,7 @@ export default function TeamAttendancePage() {
             {holidays.map((holiday) => (
               <li
                 key={holiday.id}
-                className="border-line bg-paper flex justify-between rounded-xl border px-4 py-3 text-sm"
+                className={`${cardClass} flex justify-between px-4 py-3 text-sm`}
               >
                 <span className="font-bold">
                   {holiday.holiday_on.slice(0, 10)} · {holiday.name}
