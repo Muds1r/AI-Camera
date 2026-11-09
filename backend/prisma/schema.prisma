@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum CameraStatus {
+  online
+  offline
+  error
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+model Camera {
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String
+  location    String?
+  stream_url  String?
+  status      CameraStatus @default(offline)
+  created_at  DateTime     @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime     @default(now()) @updatedAt @db.Timestamptz(6)
+  detections  Detection[]
+  alerts      Alert[]
+
+  @@map("cameras")
+}
+
+model Detection {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  camera_id     String   @db.Uuid
+  label         String
+  confidence    Float
+  bounding_box  Json?    @db.JsonB
+  snapshot_url  String?
+  created_at    DateTime @default(now()) @db.Timestamptz(6)
+  camera        Camera   @relation(fields: [camera_id], references: [id], onDelete: Cascade)
+  alerts        Alert[]
+
+  @@index([camera_id])
+  @@index([created_at(sort: Desc)])
+  @@map("detections")
+}
+
+model Alert {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  camera_id     String?       @db.Uuid
+  detection_id  String?       @db.Uuid
+  severity      AlertSeverity @default(info)
+  message       String
+  is_read       Boolean       @default(false)
+  created_at    DateTime      @default(now()) @db.Timestamptz(6)
+  camera        Camera?       @relation(fields: [camera_id], references: [id], onDelete: SetNull)
+  detection     Detection?    @relation(fields: [detection_id], references: [id], onDelete: SetNull)
+
+  @@index([camera_id])
+  @@index([created_at(sort: Desc)])
+  @@map("alerts")
+}
