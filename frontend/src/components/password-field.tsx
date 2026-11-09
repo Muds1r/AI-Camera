@@ -32,7 +32,7 @@ export function PasswordField({
       <button
         type="button"
         onClick={() => setVisible((current) => !current)}
-        className="text-brand absolute top-1/2 right-3 -translate-y-1/2 text-xs font-medium"
+        className="text-mute hover:text-ink absolute top-1/2 right-3 -translate-y-1/2 text-xs font-semibold"
       >
         {visible ? 'Hide' : 'Show'}
       </button>

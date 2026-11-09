@@ -2,8 +2,11 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { APP_NAME } from '@/lib/brand';
 import { safeNextPath } from '@/lib/auth/guards';
 import { PasswordField } from '@/components/password-field';
+import { buttonClass, cardClass, fieldClass } from '@/components/page-frame';
+import { ThemeToggle } from '@/components/theme-toggle';
 
 export function LoginForm() {
   const searchParams = useSearchParams();
@@ -11,17 +14,13 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
-  const [company, setCompany] = useState('TruckFlow');
   const [logo, setLogo] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/company/branding')
       .then((response) => response.json())
-      .then((data: { company?: { name: string; logo_url: string | null } }) => {
-        if (data.company) {
-          setCompany(data.company.name);
-          setLogo(data.company.logo_url);
-        }
+      .then((data: { company?: { logo_url: string | null } }) => {
+        if (data.company?.logo_url) setLogo(data.company.logo_url);
       })
       .catch(() => undefined);
   }, []);
@@ -51,38 +50,40 @@ export function LoginForm() {
   }
 
   return (
-    <div className="bg-canvas text-mute flex min-h-screen items-center justify-center px-4">
-      <form
-        onSubmit={onSubmit}
-        className="border-mute/25 bg-paper w-full max-w-md rounded-2xl border p-8 shadow-xl"
-      >
-        <div className="mb-8">
+    <div className="bg-bg text-ink relative flex min-h-screen items-center justify-center px-4 py-12">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
+      <form onSubmit={onSubmit} className={`${cardClass} w-full max-w-[22rem] p-8`}>
+        <div className="mb-8 text-center">
           {logo ? (
-            // Company logo is a public uploaded file.
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt="" className="mb-3 h-12 w-12 rounded-md object-cover" />
-          ) : null}
-          <p className="text-teal text-xs font-bold tracking-wide uppercase">TruckFlow</p>
-          <p className="text-ink mt-1 text-2xl font-extrabold tracking-tight">{company}</p>
-          <h1 className="text-ink mt-6 text-xl font-extrabold">Sign in</h1>
+            <img
+              src={logo}
+              alt=""
+              className="border-line mx-auto mb-4 h-14 w-14 rounded-xl border object-cover"
+            />
+          ) : (
+            <div className="bg-primary text-primary-on mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl text-xl font-bold shadow-sm">
+              {APP_NAME.slice(0, 1)}
+            </div>
+          )}
+          <h1 className="text-ink text-xl font-bold tracking-tight">{APP_NAME}</h1>
+          <p className="text-mute mt-1 text-sm font-medium">Sign in to your workspace</p>
         </div>
 
-        <label className="text-mute mb-1 block text-xs font-medium tracking-wider uppercase">
-          Email
-        </label>
+        <label className="text-mute mb-1.5 block text-xs font-semibold">Email</label>
         <input
           type="email"
           required
           autoComplete="username"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
-          className="border-line bg-paper text-ink focus:border-ink mb-4 w-full rounded-md border px-3.5 py-2 text-sm font-medium focus:outline-none"
+          className={`${fieldClass} mb-4`}
         />
 
-        <label className="text-mute mb-1 block text-xs font-medium tracking-wider uppercase">
-          Password
-        </label>
-        <div className="mb-4">
+        <label className="text-mute mb-1.5 block text-xs font-semibold">Password</label>
+        <div className="mb-5">
           <PasswordField
             required
             autoComplete="current-password"
@@ -91,14 +92,14 @@ export function LoginForm() {
           />
         </div>
 
-        {error ? <p className="text-brand mb-4 text-sm font-medium">{error}</p> : null}
+        {error ? (
+          <p className="mb-4 rounded-lg border border-red-200/80 bg-red-50 px-3 py-2 text-sm font-medium text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+            {error}
+          </p>
+        ) : null}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="bg-teal hover:bg-teal/85 w-full rounded-md py-2.5 text-sm font-bold text-white transition disabled:opacity-60"
-        >
-          {pending ? 'Signing in…' : 'Sign in'}
+        <button type="submit" disabled={pending} className={`${buttonClass} w-full`}>
+          {pending ? 'Signing in…' : 'Continue'}
         </button>
       </form>
     </div>

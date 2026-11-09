@@ -102,6 +102,7 @@ model Company {
   logo_url     String?
   weekend_days String   @default("0")
   work_start   String   @default("09:00")
+  work_end     String   @default("17:00")
   updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@map("company")

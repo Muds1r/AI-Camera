@@ -23,6 +23,7 @@ import {
   submitBenefit,
   submitLeave,
   submitProfileRequest,
+  updateLeaveDefaults,
 } from '../services/workforce.service';
 import { prisma } from '../lib/prisma';
 import { uploadDocument } from '../lib/auth/documents';
@@ -170,6 +171,16 @@ router.get(
         orderBy: { name: 'asc' },
       }),
     });
+  }),
+);
+
+router.patch(
+  '/leave/types',
+  requirePermission(Permission.CompanyManage),
+  asyncHandler(async (req, res) => {
+    const defaults =
+      req.body?.defaults && typeof req.body.defaults === 'object' ? req.body.defaults : req.body;
+    res.json({ types: await updateLeaveDefaults(req.auth!, defaults as Record<string, unknown>) });
   }),
 );
 

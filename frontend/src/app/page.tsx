@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
+import { cardClass, linkMutedClass } from '@/components/page-frame';
 import { Badge, Stat } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -37,13 +38,6 @@ interface DashboardData {
     pendingMedical: number;
     pendingLeave: number;
     pendingProfile: number;
-    activity?: {
-      id: string;
-      action: string;
-      detail: string | null;
-      created_at: string;
-      actor: { full_name: string } | null;
-    }[];
   };
   admin?: {
     totalHr: number;
@@ -79,7 +73,7 @@ export default function HomePage() {
             <Stat label="Active HR" value={data.admin.activeHr} />
             <Stat label="Inactive HR" value={data.admin.inactiveHr} />
           </div>
-          <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
+          <section className={`${cardClass} p-5`}>
             <h2 className="mb-3 font-extrabold">Recent HR accounts</h2>
             <ul className="space-y-2 text-sm">
               {data.admin.recentHr.map((person) => (
@@ -89,7 +83,7 @@ export default function HomePage() {
                 </li>
               ))}
             </ul>
-            <Link href="/admin/hr" className="text-teal mt-4 inline-block text-sm font-bold">
+            <Link href="/admin/hr" className={`${linkMutedClass} mt-4 inline-block`}>
               Manage HR accounts
             </Link>
           </section>
@@ -114,24 +108,6 @@ export default function HomePage() {
             <Stat label="Pending leave" value={data.hr.pendingLeave} />
             <Stat label="Pending profile updates" value={data.hr.pendingProfile} />
           </div>
-          {data.hr.activity ? (
-            <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
-              <h2 className="mb-3 font-extrabold">Recent activity</h2>
-              <ul className="space-y-2 text-sm">
-                {data.hr.activity.length === 0 ? (
-                  <li className="text-mute">No activity yet.</li>
-                ) : null}
-                {data.hr.activity.map((item) => (
-                  <li key={item.id} className="flex justify-between gap-3">
-                    <span className="font-bold">
-                      {item.actor?.full_name || 'System'} · {item.action}
-                    </span>
-                    <span className="text-mute">{new Date(item.created_at).toLocaleString()}</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
         </div>
       ) : null}
 
@@ -169,11 +145,14 @@ export default function HomePage() {
             />
           </div>
           {data?.role === 'dataview' ? null : (
-            <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
+            <section className={`${cardClass} p-5`}>
               <h2 className="mb-3 font-extrabold">Leave balances</h2>
               <ul className="grid gap-2 sm:grid-cols-3">
                 {personal.leaves.map((item) => (
-                  <li key={item.leave_type.name} className="bg-canvas rounded-md px-3 py-2 text-sm">
+                  <li
+                    key={item.leave_type.name}
+                    className="bg-surface rounded-md px-3 py-2 text-sm"
+                  >
                     <span className="font-bold">{item.leave_type.name}</span>
                     <span className="text-mute block">
                       {item.allocated - item.used} remaining of {item.allocated}
@@ -184,7 +163,7 @@ export default function HomePage() {
             </section>
           )}
           {data?.role === 'dataview' ? null : (
-            <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
+            <section className={`${cardClass} p-5`}>
               <h2 className="mb-3 font-extrabold">Recent requests</h2>
               <ul className="space-y-2 text-sm">
                 {personal.recentMedical.map((item) => (

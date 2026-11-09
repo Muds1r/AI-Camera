@@ -1,7 +1,14 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  buttonClass,
+  fieldClass,
+  tabActiveClass,
+  tabBarClass,
+  tabIdleClass,
+} from '@/components/page-frame';
 import { Badge, Notice, Stat } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -120,13 +127,13 @@ export default function TeamAttendancePage() {
       description="Team records, your own clock in and out, and gazette or general off days."
     >
       <Notice error={error} message={message} />
-      <div className="mb-5 flex flex-wrap gap-2">
+      <div className={tabBarClass}>
         {TABS.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setTab(item.id)}
-            className={`rounded-md px-3 py-1.5 text-sm font-bold ${tab === item.id ? 'bg-teal text-white' : 'border-line bg-paper border'}`}
+            className={tab === item.id ? tabActiveClass : tabIdleClass}
           >
             {item.label}
           </button>
@@ -181,7 +188,7 @@ export default function TeamAttendancePage() {
           />
           <div className="border-line bg-paper overflow-hidden rounded-xl border shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="bg-canvas text-mute text-xs font-bold uppercase">
+              <thead className="bg-surface text-mute text-xs font-bold uppercase">
                 <tr>
                   <th className="px-4 py-3">Employee</th>
                   <th className="px-4 py-3">Date</th>
@@ -240,9 +247,10 @@ export default function TeamAttendancePage() {
             <button
               className={buttonClass}
               type="button"
+              disabled={Boolean(mine.today?.clock_in)}
               onClick={() => clock('/api/attendance/clock-in')}
             >
-              Clock in
+              {mine.today?.clock_in ? 'Clocked in today' : 'Clock in'}
             </button>
             <button
               className="border-line rounded-md border px-4 py-2 text-sm font-bold"
