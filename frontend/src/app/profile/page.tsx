@@ -1,10 +1,16 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  buttonClass,
+  fieldClass,
+  formPanelClass,
+  labelClass,
+} from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
 import { PictureField } from '@/components/picture-field';
-import { Badge, Notice } from '@/components/widgets';
+import { Card, ListRow, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import type { SessionUser } from '@/lib/auth/types';
 
@@ -106,12 +112,11 @@ export default function ProfilePage() {
       description="Email stays fixed. Other changes go to HR unless you are a Super Admin."
     >
       <Notice error={error} message={message} />
-      <form
-        onSubmit={submit}
-        className="border-line bg-paper max-w-2xl space-y-4 rounded-xl border p-6 shadow-sm"
-      >
-        <p className="text-sm font-bold">{user?.email}</p>
-        <p className="text-mute text-xs">Email cannot be changed here.</p>
+      <form onSubmit={submit} className={`${formPanelClass} max-w-2xl space-y-4`}>
+        <div>
+          <p className="text-sm font-medium">{user?.email}</p>
+          <p className="text-mute text-xs">Email cannot be changed here.</p>
+        </div>
         <PictureField
           preview={preview}
           onFile={(file) => {
@@ -122,7 +127,7 @@ export default function ProfilePage() {
             });
           }}
         />
-        <label className="block text-xs font-bold uppercase">
+        <label className={`${labelClass} block`}>
           Full name
           <input
             className={`${fieldClass} mt-1`}
@@ -131,7 +136,7 @@ export default function ProfilePage() {
             required
           />
         </label>
-        <label className="block text-xs font-bold uppercase">
+        <label className={`${labelClass} block`}>
           Phone
           <input
             className={`${fieldClass} mt-1`}
@@ -139,7 +144,7 @@ export default function ProfilePage() {
             onChange={(event) => setPhone(event.target.value)}
           />
         </label>
-        <label className="block text-xs font-bold uppercase">
+        <label className={`${labelClass} block`}>
           Address
           <input
             className={`${fieldClass} mt-1`}
@@ -147,7 +152,7 @@ export default function ProfilePage() {
             onChange={(event) => setAddress(event.target.value)}
           />
         </label>
-        <label className="block text-xs font-bold uppercase">
+        <label className={`${labelClass} block`}>
           Department
           <input
             className={`${fieldClass} mt-1`}
@@ -155,7 +160,7 @@ export default function ProfilePage() {
             onChange={(event) => setDepartment(event.target.value)}
           />
         </label>
-        <label className="block text-xs font-bold uppercase">
+        <label className={`${labelClass} block`}>
           Designation
           <input
             className={`${fieldClass} mt-1`}
@@ -163,7 +168,7 @@ export default function ProfilePage() {
             onChange={(event) => setDesignation(event.target.value)}
           />
         </label>
-        <label className="block text-xs font-bold uppercase">
+        <label className={`${labelClass} block`}>
           Info
           <textarea
             className={`${fieldClass} mt-1 min-h-20`}
@@ -172,7 +177,7 @@ export default function ProfilePage() {
           />
         </label>
         <div className="border-line border-t pt-4">
-          <p className="mb-3 text-sm font-extrabold">Change password</p>
+          <p className="text-ink mb-3 text-sm font-medium">Change password</p>
           <PasswordField
             value={currentPassword}
             onChange={setCurrentPassword}
@@ -192,20 +197,20 @@ export default function ProfilePage() {
           {user?.role === 'super_admin' ? 'Save profile' : 'Send update request'}
         </button>
       </form>
-      <ul className="mt-6 max-w-2xl space-y-2">
-        {requests.map((item) => (
-          <li
-            key={item.id}
-            className="border-line bg-paper flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
-          >
-            <span>
-              {new Date(item.created_at).toLocaleDateString()}{' '}
-              {item.review_note ? `· ${item.review_note}` : ''}
-            </span>
-            <Badge status={item.status} />
-          </li>
-        ))}
-      </ul>
+      {requests.length > 0 ? (
+        <Card title="Past update requests">
+          <div className="space-y-2">
+            {requests.map((item) => (
+              <ListRow
+                key={item.id}
+                title={new Date(item.created_at).toLocaleDateString()}
+                detail={item.review_note ?? undefined}
+                status={item.status}
+              />
+            ))}
+          </div>
+        </Card>
+      ) : null}
     </PageFrame>
   );
 }

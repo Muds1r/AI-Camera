@@ -870,6 +870,7 @@ export async function dashboardFor(actor: AuthUser) {
       clockedIn,
       presentToday: todayCount.present ?? 0,
       lateToday: todayCount.late ?? 0,
+      absentToday: todayCount.absent ?? 0,
       pendingMedical,
       pendingLeave,
       pendingProfile,

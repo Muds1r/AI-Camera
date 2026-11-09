@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AppShell } from '@/components/app-shell';
-import { cardClass, linkMutedClass } from '@/components/page-frame';
-import { Badge, Stat } from '@/components/widgets';
+import { HrWorkspaceDashboard, personalSnapshotFromApi } from '@/components/dashboard/hr-workspace';
+import { PageSection, linkMutedClass } from '@/components/page-frame';
+import { Card, ListRow, LoadingState, MetricStrip, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 interface DashboardData {
@@ -35,6 +36,7 @@ interface DashboardData {
     clockedIn: number;
     presentToday?: number;
     lateToday?: number;
+    absentToday?: number;
     pendingMedical: number;
     pendingLeave: number;
     pendingProfile: number;
@@ -60,133 +62,139 @@ export default function HomePage() {
 
   const personal = data?.personal;
   const summary = personal?.attendance.summary;
+  const isHr = data?.role === 'hr' && data.hr && personal;
+
+  const recentItems = [
+    ...(personal?.recentMedical.map((item) => ({
+      id: item.id,
+      title: `${item.kind} · ${item.amount}`,
+      status: item.status,
+    })) ?? []),
+    ...(personal?.recentLeave.map((item) => ({
+      id: item.id,
+      title: `${item.leave_type.name} · ${item.days} days`,
+      status: item.status,
+    })) ?? []),
+  ];
 
   return (
-    <AppShell title="Dashboard">
-      {error ? <p className="text-danger mb-4 text-sm font-bold">{error}</p> : null}
-      {!data ? <p className="text-mute">Loading dashboard…</p> : null}
+    <AppShell title="Dashboard" workspaceLabel={isHr ? 'HR workspace' : undefined}>
+      <div className="flex flex-col gap-10">
+        <Notice error={error} />
+        {!data && !error ? <LoadingState label="Loading dashboard…" /> : null}
 
-      {data?.admin ? (
-        <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="HR accounts" value={data.admin.totalHr} />
-            <Stat label="Active HR" value={data.admin.activeHr} />
-            <Stat label="Inactive HR" value={data.admin.inactiveHr} />
-          </div>
-          <section className={`${cardClass} p-5`}>
-            <h2 className="mb-3 font-extrabold">Recent HR accounts</h2>
-            <ul className="space-y-2 text-sm">
-              {data.admin.recentHr.map((person) => (
-                <li key={person.id} className="flex justify-between">
-                  <span className="font-bold">{person.full_name}</span>
-                  <span className="text-mute">{person.email}</span>
-                </li>
-              ))}
-            </ul>
-            <Link href="/admin/hr" className={`${linkMutedClass} mt-4 inline-block`}>
-              Manage HR accounts
-            </Link>
-          </section>
-        </div>
-      ) : null}
+        {isHr ? (
+          <HrWorkspaceDashboard
+            hr={{
+              employees: data.hr!.employees,
+              inactive: data.hr!.inactive,
+              presentToday: data.hr!.presentToday ?? 0,
+              lateToday: data.hr!.lateToday ?? 0,
+              absentToday: data.hr!.absentToday ?? 0,
+              pendingMedical: data.hr!.pendingMedical,
+              pendingLeave: data.hr!.pendingLeave,
+              pendingProfile: data.hr!.pendingProfile,
+            }}
+            personal={personalSnapshotFromApi({
+              attendance: personal!.attendance,
+              salary: personal!.salary,
+              benefits: personal!.benefits,
+            })}
+          />
+        ) : null}
 
-      {data?.hr ? (
-        <div className="mt-6 space-y-6">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Stat
-              label="Total people"
-              value={data.hr.total ?? data.hr.employees + data.hr.inactive}
+        {data?.admin ? (
+          <PageSection title="Administration">
+            <MetricStrip
+              items={[
+                { label: 'HR accounts', value: data.admin.totalHr },
+                { label: 'Active', value: data.admin.activeHr },
+                { label: 'Inactive', value: data.admin.inactiveHr },
+              ]}
             />
-            <Stat label="Active employees" value={data.hr.employees} />
-            <Stat label="Inactive employees" value={data.hr.inactive} />
-            <Stat label="Clocked in now" value={data.hr.clockedIn} />
-            <Stat
-              label="Today present / late"
-              value={`${data.hr.presentToday ?? 0} / ${data.hr.lateToday ?? 0}`}
-            />
-            <Stat label="Pending medical / OPD" value={data.hr.pendingMedical} />
-            <Stat label="Pending leave" value={data.hr.pendingLeave} />
-            <Stat label="Pending profile updates" value={data.hr.pendingProfile} />
-          </div>
-        </div>
-      ) : null}
-
-      {personal && summary ? (
-        <div className="mt-6 space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Stat label="Today" value={personal.attendance.today?.status ?? 'Not clocked in'} />
-            {data?.role === 'dataview' ? null : (
-              <Stat
-                label="Net salary"
-                value={personal.salary ? personal.salary.net.toLocaleString() : '—'}
-              />
-            )}
-            {data?.role === 'dataview' ? null : (
-              <Stat label="Medical left" value={personal.benefits?.medical.remaining ?? '—'} />
-            )}
-            {data?.role === 'dataview' ? null : (
-              <Stat label="OPD left" value={personal.benefits?.opd.remaining ?? '—'} />
-            )}
-          </div>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Stat
-              label="Working days"
-              value={summary.workingDays}
-              hint={`${summary.sundays} Sundays`}
-            />
-            <Stat
-              label="Present / late / absent"
-              value={`${summary.present} / ${summary.late} / ${summary.absent}`}
-            />
-            <Stat
-              label="Holidays"
-              value={summary.gazetted + summary.generalOff}
-              hint={`${summary.gazetted} gazetted`}
-            />
-          </div>
-          {data?.role === 'dataview' ? null : (
-            <section className={`${cardClass} p-5`}>
-              <h2 className="mb-3 font-extrabold">Leave balances</h2>
-              <ul className="grid gap-2 sm:grid-cols-3">
-                {personal.leaves.map((item) => (
+            <Card
+              title="Recent HR accounts"
+              action={
+                <Link href="/admin/hr" className={linkMutedClass}>
+                  Manage
+                </Link>
+              }
+            >
+              <ul className="divide-line divide-y">
+                {data.admin.recentHr.map((person) => (
                   <li
-                    key={item.leave_type.name}
-                    className="bg-surface rounded-md px-3 py-2 text-sm"
+                    key={person.id}
+                    className="flex items-center justify-between gap-4 py-2.5 text-sm first:pt-0 last:pb-0"
                   >
-                    <span className="font-bold">{item.leave_type.name}</span>
-                    <span className="text-mute block">
-                      {item.allocated - item.used} remaining of {item.allocated}
-                    </span>
+                    <span className="font-medium">{person.full_name}</span>
+                    <span className="text-mute truncate text-xs">{person.email}</span>
                   </li>
                 ))}
               </ul>
-            </section>
-          )}
-          {data?.role === 'dataview' ? null : (
-            <section className={`${cardClass} p-5`}>
-              <h2 className="mb-3 font-extrabold">Recent requests</h2>
-              <ul className="space-y-2 text-sm">
-                {personal.recentMedical.map((item) => (
-                  <li key={item.id} className="flex items-center justify-between">
-                    <span className="font-bold">
-                      {item.kind} · {item.amount}
-                    </span>
-                    <Badge status={item.status} />
-                  </li>
-                ))}
-                {personal.recentLeave.map((item) => (
-                  <li key={item.id} className="flex items-center justify-between">
-                    <span className="font-bold">
-                      {item.leave_type.name} · {item.days} days
-                    </span>
-                    <Badge status={item.status} />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-        </div>
-      ) : null}
+            </Card>
+          </PageSection>
+        ) : null}
+
+        {personal && summary && data?.role !== 'hr' ? (
+          <PageSection
+            title={data?.role === 'dataview' ? 'Attendance snapshot' : 'Your snapshot'}
+            description={
+              data?.role === 'dataview'
+                ? 'Your clock and monthly record.'
+                : 'Pay, benefits, and attendance for your account.'
+            }
+          >
+            <MetricStrip
+              items={[
+                {
+                  label: 'Today',
+                  value: personal.attendance.today?.status ?? 'Not clocked in',
+                },
+                ...(data?.role === 'dataview'
+                  ? []
+                  : [
+                      {
+                        label: 'Net pay',
+                        value: personal.salary
+                          ? `PKR ${personal.salary.net.toLocaleString()}`
+                          : '—',
+                      },
+                      {
+                        label: 'Medical',
+                        value: personal.benefits?.medical.remaining ?? '—',
+                      },
+                      {
+                        label: 'OPD',
+                        value: personal.benefits?.opd.remaining ?? '—',
+                      },
+                    ]),
+                {
+                  label: 'This month',
+                  value: `${summary.present} present`,
+                  hint: `${summary.late} late · ${summary.absent} absent`,
+                },
+              ]}
+            />
+
+            {data?.role !== 'dataview' && recentItems.length > 0 ? (
+              <Card
+                title="Recent requests"
+                action={
+                  <Link href="/requests" className={linkMutedClass}>
+                    All requests
+                  </Link>
+                }
+              >
+                <div className="space-y-2">
+                  {recentItems.map((item) => (
+                    <ListRow key={item.id} title={item.title} status={item.status} />
+                  ))}
+                </div>
+              </Card>
+            ) : null}
+          </PageSection>
+        ) : null}
+      </div>
     </AppShell>
   );
 }

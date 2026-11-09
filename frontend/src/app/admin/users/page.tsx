@@ -4,7 +4,21 @@ import { FormEvent, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
 import { ROLE_LABELS, ROLES, type Role } from '@/lib/auth/permissions';
 import type { SessionUser } from '@/lib/auth/types';
-import { buttonClass, fieldClass, PageFrame } from '@/components/page-frame';
+import {
+  buttonClass,
+  DataPanel,
+  fieldClass,
+  formPanelClass,
+  PageFrame,
+  PageSection,
+} from '@/components/page-frame';
+import {
+  Notice,
+  tableClass,
+  tableHeadClass,
+  tableRowClass,
+  tableWrapClass,
+} from '@/components/widgets';
 import { PasswordField } from '@/components/password-field';
 import { PictureField } from '@/components/picture-field';
 
@@ -105,117 +119,119 @@ export default function AccountsPage() {
       title="Accounts"
       description="Super Admin can create any account type and assign any of the four roles."
     >
-      {message ? <p className="text-brand mb-4 text-sm">{message}</p> : null}
-      {error ? <p className="text-brand mb-4 text-sm font-medium">{error}</p> : null}
-      <form
-        onSubmit={createAccount}
-        className="border-mute/25 bg-paper mb-8 grid gap-3 rounded-xl border p-5 md:grid-cols-2"
-      >
-        <input
-          required
-          className={fieldClass}
-          placeholder="Full name"
-          value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
-        />
-        <input
-          required
-          type="email"
-          className={fieldClass}
-          placeholder="Email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          placeholder="Phone"
-          value={phone}
-          onChange={(event) => setPhone(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          placeholder="Address"
-          value={address}
-          onChange={(event) => setAddress(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          placeholder="ID card number"
-          value={idCard}
-          onChange={(event) => setIdCard(event.target.value)}
-        />
-        <textarea
-          className={`${fieldClass} min-h-20 md:col-span-2`}
-          placeholder="Basic info"
-          value={info}
-          onChange={(event) => setInfo(event.target.value)}
-        />
-        <PasswordField
-          required
-          autoComplete="new-password"
-          placeholder="Temporary password"
-          value={password}
-          onChange={setPassword}
-        />
-        <PictureField
-          preview={preview}
-          onFile={(file) => {
-            setPicture(file);
-            setPreview((current) => {
-              if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
-              return file ? URL.createObjectURL(file) : null;
-            });
-          }}
-        />
-        <select
-          className={fieldClass}
-          value={role}
-          onChange={(event) => setRole(event.target.value as Role)}
-        >
-          {ROLES.map((item) => (
-            <option key={item} value={item}>
-              {ROLE_LABELS[item]}
-            </option>
-          ))}
-        </select>
-        <button className={`${buttonClass} md:col-span-2 md:w-fit`} type="submit">
-          Create account
-        </button>
-      </form>
-
-      <div className="border-mute/25 bg-paper overflow-hidden rounded-xl border">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-surface text-mute text-xs tracking-wider uppercase">
-            <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => (
-              <tr key={user.id} className="border-mute/25 border-t">
-                <td className="px-4 py-3">{user.full_name}</td>
-                <td className="text-mute px-4 py-3">{user.email}</td>
-                <td className="px-4 py-3">
-                  <select
-                    className={fieldClass}
-                    value={user.role}
-                    disabled={user.id === me?.id}
-                    onChange={(event) => changeRole(user, event.target.value as Role)}
-                  >
-                    {ROLES.map((item) => (
-                      <option key={item} value={item}>
-                        {ROLE_LABELS[item]}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-              </tr>
+      <Notice error={error} message={message} />
+      <PageSection title="Create account">
+        <form onSubmit={createAccount} className={`${formPanelClass} md:grid-cols-2`}>
+          <input
+            required
+            className={fieldClass}
+            placeholder="Full name"
+            value={fullName}
+            onChange={(event) => setFullName(event.target.value)}
+          />
+          <input
+            required
+            type="email"
+            className={fieldClass}
+            placeholder="Email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Phone"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Address"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="ID card number"
+            value={idCard}
+            onChange={(event) => setIdCard(event.target.value)}
+          />
+          <textarea
+            className={`${fieldClass} min-h-20 md:col-span-2`}
+            placeholder="Basic info"
+            value={info}
+            onChange={(event) => setInfo(event.target.value)}
+          />
+          <PasswordField
+            required
+            autoComplete="new-password"
+            placeholder="Temporary password"
+            value={password}
+            onChange={setPassword}
+          />
+          <PictureField
+            preview={preview}
+            onFile={(file) => {
+              setPicture(file);
+              setPreview((current) => {
+                if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+                return file ? URL.createObjectURL(file) : null;
+              });
+            }}
+          />
+          <select
+            className={fieldClass}
+            value={role}
+            onChange={(event) => setRole(event.target.value as Role)}
+          >
+            {ROLES.map((item) => (
+              <option key={item} value={item}>
+                {ROLE_LABELS[item]}
+              </option>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </select>
+          <button className={`${buttonClass} md:col-span-2 md:w-fit`} type="submit">
+            Create account
+          </button>
+        </form>
+      </PageSection>
+
+      <PageSection title="All accounts">
+        <DataPanel>
+          <div className={tableWrapClass}>
+            <table className={tableClass}>
+              <thead className={tableHeadClass}>
+                <tr>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((user) => (
+                  <tr key={user.id} className={tableRowClass}>
+                    <td className="px-4 py-3">{user.full_name}</td>
+                    <td className="text-mute px-4 py-3">{user.email}</td>
+                    <td className="px-4 py-3">
+                      <select
+                        className={fieldClass}
+                        value={user.role}
+                        disabled={user.id === me?.id}
+                        onChange={(event) => changeRole(user, event.target.value as Role)}
+                      >
+                        {ROLES.map((item) => (
+                          <option key={item} value={item}>
+                            {ROLE_LABELS[item]}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DataPanel>
+      </PageSection>
     </PageFrame>
   );
 }

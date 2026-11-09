@@ -1,46 +1,31 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PageFrame, linkMutedClass } from '@/components/page-frame';
-import { Stat } from '@/components/widgets';
-import { apiJson } from '@/lib/api';
+import { Card } from '@/components/widgets';
+
+const LINKS = [
+  { href: '/admin/hr', label: 'HR accounts', detail: 'Create and manage HR logins' },
+  { href: '/admin/logs', label: 'Activity', detail: 'Audit trail of important changes' },
+  { href: '/cameras', label: 'Cameras', detail: 'Live camera registry' },
+  { href: '/operations', label: 'Operations', detail: 'Detections and alerts' },
+] as const;
 
 export default function AdminHome() {
-  const [admin, setAdmin] = useState<{
-    totalHr: number;
-    activeHr: number;
-    inactiveHr: number;
-  } | null>(null);
-
-  useEffect(() => {
-    apiJson<{ admin?: { totalHr: number; activeHr: number; inactiveHr: number } }>(
-      '/api/dashboard',
-    ).then((data) => setAdmin(data.admin ?? null));
-  }, []);
-
   return (
-    <PageFrame
-      title="Administration"
-      description="HR accounts and the record of important actions."
-    >
-      {admin ? (
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Stat label="HR accounts" value={admin.totalHr} />
-          <Stat label="Active" value={admin.activeHr} />
-          <Stat label="Inactive" value={admin.inactiveHr} />
-        </div>
-      ) : (
-        <p className="text-mute">Loading…</p>
-      )}
-      <div className="mt-6 flex gap-4 text-sm font-bold">
-        <Link className={linkMutedClass} href="/admin/hr">
-          HR accounts
-        </Link>
-        <Link className={linkMutedClass} href="/admin/logs">
-          Activity log
-        </Link>
-      </div>
+    <PageFrame title="Administration">
+      <Card title="Sections">
+        <ul className="divide-line divide-y">
+          {LINKS.map((item) => (
+            <li key={item.href} className="py-3 first:pt-0 last:pb-0">
+              <Link href={item.href} className="group block">
+                <span className={`${linkMutedClass} text-sm`}>{item.label}</span>
+                <p className="text-mute mt-0.5 text-xs">{item.detail}</p>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
     </PageFrame>
   );
 }

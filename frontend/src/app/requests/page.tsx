@@ -5,12 +5,13 @@ import {
   PageFrame,
   buttonClass,
   fieldClass,
+  formPanelClass,
+  labelClass,
   tabActiveClass,
   tabBarClass,
   tabIdleClass,
-  linkMutedClass,
 } from '@/components/page-frame';
-import { Badge, Notice, Stat } from '@/components/widgets';
+import { EmptyState, ListRow, MetricStrip, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 type Tab = 'benefits' | 'leave';
@@ -162,20 +163,16 @@ export default function RequestsPage() {
 
       {tab === 'leave' ? (
         <>
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
-            {balances.map((item) => (
-              <Stat
-                key={item.id}
-                label={item.leave_type.name}
-                value={item.allocated - item.used}
-                hint={`${item.used} used of ${item.allocated}`}
-              />
-            ))}
-          </div>
-          <form
-            onSubmit={submitLeave}
-            className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-          >
+          {balances.length > 0 ? (
+            <MetricStrip
+              items={balances.map((item) => ({
+                label: item.leave_type.name,
+                value: item.allocated - item.used,
+                hint: `${item.used} used of ${item.allocated}`,
+              }))}
+            />
+          ) : null}
+          <form onSubmit={submitLeave} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
             <select
               className={fieldClass}
               value={typeId}
@@ -224,23 +221,22 @@ export default function RequestsPage() {
       ) : (
         <>
           {allowance ? (
-            <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <Stat
-                label="Medical remaining"
-                value={allowance.medical.remaining}
-                hint={`${allowance.medical.used} used of ${allowance.medical.limit}`}
-              />
-              <Stat
-                label="OPD remaining"
-                value={allowance.opd.remaining}
-                hint={`${allowance.opd.used} used of ${allowance.opd.limit}`}
-              />
-            </div>
+            <MetricStrip
+              items={[
+                {
+                  label: 'Medical remaining',
+                  value: allowance.medical.remaining,
+                  hint: `${allowance.medical.used} used of ${allowance.medical.limit}`,
+                },
+                {
+                  label: 'OPD remaining',
+                  value: allowance.opd.remaining,
+                  hint: `${allowance.opd.used} used of ${allowance.opd.limit}`,
+                },
+              ]}
+            />
           ) : null}
-          <form
-            onSubmit={submitClaim}
-            className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-          >
+          <form onSubmit={submitClaim} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
             <select
               className={fieldClass}
               value={kind}
@@ -265,7 +261,7 @@ export default function RequestsPage() {
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
-            <label className="text-xs font-bold uppercase md:col-span-2">
+            <label className={`${labelClass} md:col-span-2`}>
               Supporting document
               <input
                 className={`${fieldClass} mt-1`}
@@ -298,26 +294,18 @@ function History({
 }: {
   rows: { id: string; title: string; detail: string; status: string; href?: string | null }[];
 }) {
-  if (rows.length === 0) return <p className="text-mute text-sm">No requests yet.</p>;
+  if (rows.length === 0) return <EmptyState>No requests yet.</EmptyState>;
   return (
-    <ul className="space-y-2">
+    <div className="space-y-2">
       {rows.map((row) => (
-        <li
+        <ListRow
           key={row.id}
-          className="border-line bg-paper flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm"
-        >
-          <div>
-            <p className="font-bold">{row.title}</p>
-            <p className="text-mute">{row.detail}</p>
-            {row.href ? (
-              <a className={linkMutedClass} href={row.href}>
-                View document
-              </a>
-            ) : null}
-          </div>
-          <Badge status={row.status} />
-        </li>
+          title={row.title}
+          detail={row.detail}
+          status={row.status}
+          href={row.href}
+        />
       ))}
-    </ul>
+    </div>
   );
 }
