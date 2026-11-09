@@ -99,7 +99,10 @@ export default function HomePage() {
       {data?.hr ? (
         <div className="mt-6 space-y-6">
           <div className="grid gap-4 sm:grid-cols-3">
-            <Stat label="Total people" value={data.hr.total ?? data.hr.employees + data.hr.inactive} />
+            <Stat
+              label="Total people"
+              value={data.hr.total ?? data.hr.employees + data.hr.inactive}
+            />
             <Stat label="Active employees" value={data.hr.employees} />
             <Stat label="Inactive employees" value={data.hr.inactive} />
             <Stat label="Clocked in now" value={data.hr.clockedIn} />
@@ -115,7 +118,9 @@ export default function HomePage() {
             <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
               <h2 className="mb-3 font-extrabold">Recent activity</h2>
               <ul className="space-y-2 text-sm">
-                {data.hr.activity.length === 0 ? <li className="text-mute">No activity yet.</li> : null}
+                {data.hr.activity.length === 0 ? (
+                  <li className="text-mute">No activity yet.</li>
+                ) : null}
                 {data.hr.activity.map((item) => (
                   <li key={item.id} className="flex justify-between gap-3">
                     <span className="font-bold">
@@ -164,42 +169,42 @@ export default function HomePage() {
             />
           </div>
           {data?.role === 'dataview' ? null : (
-          <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
-            <h2 className="mb-3 font-extrabold">Leave balances</h2>
-            <ul className="grid gap-2 sm:grid-cols-3">
-              {personal.leaves.map((item) => (
-                <li key={item.leave_type.name} className="bg-canvas rounded-md px-3 py-2 text-sm">
-                  <span className="font-bold">{item.leave_type.name}</span>
-                  <span className="text-mute block">
-                    {item.allocated - item.used} remaining of {item.allocated}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </section>
+            <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
+              <h2 className="mb-3 font-extrabold">Leave balances</h2>
+              <ul className="grid gap-2 sm:grid-cols-3">
+                {personal.leaves.map((item) => (
+                  <li key={item.leave_type.name} className="bg-canvas rounded-md px-3 py-2 text-sm">
+                    <span className="font-bold">{item.leave_type.name}</span>
+                    <span className="text-mute block">
+                      {item.allocated - item.used} remaining of {item.allocated}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
           {data?.role === 'dataview' ? null : (
-          <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
-            <h2 className="mb-3 font-extrabold">Recent requests</h2>
-            <ul className="space-y-2 text-sm">
-              {personal.recentMedical.map((item) => (
-                <li key={item.id} className="flex items-center justify-between">
-                  <span className="font-bold">
-                    {item.kind} · {item.amount}
-                  </span>
-                  <Badge status={item.status} />
-                </li>
-              ))}
-              {personal.recentLeave.map((item) => (
-                <li key={item.id} className="flex items-center justify-between">
-                  <span className="font-bold">
-                    {item.leave_type.name} · {item.days} days
-                  </span>
-                  <Badge status={item.status} />
-                </li>
-              ))}
-            </ul>
-          </section>
+            <section className="border-line bg-paper rounded-xl border p-5 shadow-sm">
+              <h2 className="mb-3 font-extrabold">Recent requests</h2>
+              <ul className="space-y-2 text-sm">
+                {personal.recentMedical.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between">
+                    <span className="font-bold">
+                      {item.kind} · {item.amount}
+                    </span>
+                    <Badge status={item.status} />
+                  </li>
+                ))}
+                {personal.recentLeave.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between">
+                    <span className="font-bold">
+                      {item.leave_type.name} · {item.days} days
+                    </span>
+                    <Badge status={item.status} />
+                  </li>
+                ))}
+              </ul>
+            </section>
           )}
         </div>
       ) : null}

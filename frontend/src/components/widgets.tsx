@@ -60,10 +60,18 @@ export function ConfirmDialog({
         {detail ? <p className="text-mute mt-2 text-sm">{detail}</p> : null}
         {children}
         <div className="mt-4 flex justify-end gap-2">
-          <button type="button" className="border-line rounded-md border px-3 py-1.5 text-sm font-bold" onClick={onClose}>
+          <button
+            type="button"
+            className="border-line rounded-md border px-3 py-1.5 text-sm font-bold"
+            onClick={onClose}
+          >
             Cancel
           </button>
-          <button type="button" className={`${tone === 'teal' ? 'bg-teal' : 'bg-danger'} rounded-md px-3 py-1.5 text-sm font-bold text-white`} onClick={onConfirm}>
+          <button
+            type="button"
+            className={`${tone === 'teal' ? 'bg-teal' : 'bg-danger'} rounded-md px-3 py-1.5 text-sm font-bold text-white`}
+            onClick={onConfirm}
+          >
             {confirmLabel}
           </button>
         </div>

@@ -101,7 +101,9 @@ export default function EmployeesPage() {
 
   async function openPerson(person: SessionUser) {
     setError('');
-    const data = await apiJson<{ user: SessionUser; balances: Balance[] }>(`/api/users/${person.id}`);
+    const data = await apiJson<{ user: SessionUser; balances: Balance[] }>(
+      `/api/users/${person.id}`,
+    );
     setSelected(data.user);
     setBalances(data.balances);
     setPhone(data.user.phone || '');
@@ -173,20 +175,87 @@ export default function EmployeesPage() {
         onSubmit={create}
         className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
       >
-        <input required className={fieldClass} placeholder="Full name" value={fullName} onChange={(event) => setFullName(event.target.value)} />
-        <input required type="email" className={fieldClass} placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} />
-        <input className={fieldClass} placeholder="Department" value={department} onChange={(event) => setDepartment(event.target.value)} />
-        <input className={fieldClass} placeholder="Designation" value={designation} onChange={(event) => setDesignation(event.target.value)} />
-        <input className={fieldClass} type="number" min="0" placeholder="Basic salary" value={salary} onChange={(event) => setSalary(event.target.value)} />
-        <input className={fieldClass} type="number" min="0" placeholder="Allowance" value={allowance} onChange={(event) => setAllowance(event.target.value)} />
-        <input className={fieldClass} type="number" min="0" placeholder="Deduction" value={deduction} onChange={(event) => setDeduction(event.target.value)} />
-        <input className={fieldClass} type="number" min="0" placeholder="Medical limit" value={medical} onChange={(event) => setMedical(event.target.value)} />
-        <input className={fieldClass} type="number" min="0" placeholder="OPD limit" value={opd} onChange={(event) => setOpd(event.target.value)} />
-        <select className={fieldClass} value={newRole} onChange={(event) => setNewRole(event.target.value as 'employee' | 'dataview')}>
+        <input
+          required
+          className={fieldClass}
+          placeholder="Full name"
+          value={fullName}
+          onChange={(event) => setFullName(event.target.value)}
+        />
+        <input
+          required
+          type="email"
+          className={fieldClass}
+          placeholder="Email"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+        />
+        <input
+          className={fieldClass}
+          placeholder="Department"
+          value={department}
+          onChange={(event) => setDepartment(event.target.value)}
+        />
+        <input
+          className={fieldClass}
+          placeholder="Designation"
+          value={designation}
+          onChange={(event) => setDesignation(event.target.value)}
+        />
+        <input
+          className={fieldClass}
+          type="number"
+          min="0"
+          placeholder="Basic salary"
+          value={salary}
+          onChange={(event) => setSalary(event.target.value)}
+        />
+        <input
+          className={fieldClass}
+          type="number"
+          min="0"
+          placeholder="Allowance"
+          value={allowance}
+          onChange={(event) => setAllowance(event.target.value)}
+        />
+        <input
+          className={fieldClass}
+          type="number"
+          min="0"
+          placeholder="Deduction"
+          value={deduction}
+          onChange={(event) => setDeduction(event.target.value)}
+        />
+        <input
+          className={fieldClass}
+          type="number"
+          min="0"
+          placeholder="Medical limit"
+          value={medical}
+          onChange={(event) => setMedical(event.target.value)}
+        />
+        <input
+          className={fieldClass}
+          type="number"
+          min="0"
+          placeholder="OPD limit"
+          value={opd}
+          onChange={(event) => setOpd(event.target.value)}
+        />
+        <select
+          className={fieldClass}
+          value={newRole}
+          onChange={(event) => setNewRole(event.target.value as 'employee' | 'dataview')}
+        >
           <option value="employee">Employee</option>
           <option value="dataview">DataView</option>
         </select>
-        <PasswordField required value={password} onChange={setPassword} placeholder="Temporary password" />
+        <PasswordField
+          required
+          value={password}
+          onChange={setPassword}
+          placeholder="Temporary password"
+        />
         <button className={buttonClass} type="submit">
           Create account
         </button>
@@ -252,7 +321,11 @@ export default function EmployeesPage() {
             {users.map((person) => (
               <tr key={person.id} className="border-line border-t">
                 <td className="px-4 py-3 font-bold">
-                  <button type="button" className="text-left" onClick={() => openPerson(person).catch(() => undefined)}>
+                  <button
+                    type="button"
+                    className="text-left"
+                    onClick={() => openPerson(person).catch(() => undefined)}
+                  >
                     {person.full_name}
                     <span className="text-mute block font-medium">{person.email}</span>
                   </button>
@@ -302,22 +375,88 @@ export default function EmployeesPage() {
       </div>
 
       {selected ? (
-        <form onSubmit={savePerson} className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2">
+        <form
+          onSubmit={savePerson}
+          className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
+        >
           <h2 className="font-extrabold md:col-span-2">{selected.full_name}</h2>
           <p className="text-mute text-sm md:col-span-2">{selected.email}</p>
-          <input className={fieldClass} value={selected.full_name} onChange={(event) => setSelected({ ...selected, full_name: event.target.value })} />
-          <input className={fieldClass} placeholder="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-          <input className={fieldClass} placeholder="Address" value={address} onChange={(event) => setAddress(event.target.value)} />
-          <input className={fieldClass} placeholder="Department" value={editDepartment} onChange={(event) => setEditDepartment(event.target.value)} />
-          <input className={fieldClass} placeholder="Designation" value={editDesignation} onChange={(event) => setEditDesignation(event.target.value)} />
-          <input className={fieldClass} placeholder="Employment notes" value={info} onChange={(event) => setInfo(event.target.value)} />
-          <input className={fieldClass} type="number" min="0" value={editSalary} onChange={(event) => setEditSalary(event.target.value)} />
-          <input className={fieldClass} type="number" min="0" value={editAllowance} onChange={(event) => setEditAllowance(event.target.value)} />
-          <input className={fieldClass} type="number" min="0" value={editDeduction} onChange={(event) => setEditDeduction(event.target.value)} />
-          <input className={fieldClass} type="number" min="0" value={editMedical} onChange={(event) => setEditMedical(event.target.value)} />
-          <input className={fieldClass} type="number" min="0" value={editOpd} onChange={(event) => setEditOpd(event.target.value)} />
+          <input
+            className={fieldClass}
+            value={selected.full_name}
+            onChange={(event) => setSelected({ ...selected, full_name: event.target.value })}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Phone"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Address"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Department"
+            value={editDepartment}
+            onChange={(event) => setEditDepartment(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Designation"
+            value={editDesignation}
+            onChange={(event) => setEditDesignation(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Employment notes"
+            value={info}
+            onChange={(event) => setInfo(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            type="number"
+            min="0"
+            value={editSalary}
+            onChange={(event) => setEditSalary(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            type="number"
+            min="0"
+            value={editAllowance}
+            onChange={(event) => setEditAllowance(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            type="number"
+            min="0"
+            value={editDeduction}
+            onChange={(event) => setEditDeduction(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            type="number"
+            min="0"
+            value={editMedical}
+            onChange={(event) => setEditMedical(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            type="number"
+            min="0"
+            value={editOpd}
+            onChange={(event) => setEditOpd(event.target.value)}
+          />
           <label className="flex items-center gap-2 text-sm font-bold">
-            <input type="checkbox" checked={clockEnabled} onChange={(event) => setClockEnabled(event.target.checked)} />
+            <input
+              type="checkbox"
+              checked={clockEnabled}
+              onChange={(event) => setClockEnabled(event.target.checked)}
+            />
             Clock in enabled
           </label>
           {balances.map((item) => (
@@ -331,7 +470,9 @@ export default function EmployeesPage() {
                 onChange={(event) =>
                   setBalances((current) =>
                     current.map((balance) =>
-                      balance.id === item.id ? { ...balance, allocated: Number(event.target.value) } : balance,
+                      balance.id === item.id
+                        ? { ...balance, allocated: Number(event.target.value) }
+                        : balance,
                     ),
                   )
                 }
@@ -347,7 +488,11 @@ export default function EmployeesPage() {
       <ConfirmDialog
         open={Boolean(confirming)}
         title={confirming?.is_active ? 'Deactivate this account?' : 'Activate this account?'}
-        detail={confirming ? `${confirming.full_name} will ${confirming.is_active ? 'lose' : 'regain'} access.` : undefined}
+        detail={
+          confirming
+            ? `${confirming.full_name} will ${confirming.is_active ? 'lose' : 'regain'} access.`
+            : undefined
+        }
         confirmLabel={confirming?.is_active ? 'Deactivate' : 'Activate'}
         onClose={() => setConfirming(null)}
         onConfirm={() => {

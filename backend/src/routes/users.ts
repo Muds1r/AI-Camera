@@ -4,12 +4,7 @@ import { setAuthCookies } from '../lib/auth/cookies';
 import { ACCESS_TTL_SECONDS } from '../lib/auth/tokens';
 import { HttpError, routeParam } from '../lib/http';
 import { requireAnyPermission, requireAuth, requirePermission } from '../middleware/auth';
-import {
-  assignRole,
-  createAccount,
-  publicUserSelect,
-  updateOwnProfile,
-} from '../lib/auth/users';
+import { assignRole, createAccount, publicUserSelect, updateOwnProfile } from '../lib/auth/users';
 import { prisma } from '../lib/prisma';
 import { replaceSessionAfterPasswordChange } from '../services/auth.service';
 import {

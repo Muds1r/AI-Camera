@@ -280,9 +280,7 @@ function requestFilters(status: unknown, q: unknown, from: unknown, to: unknown)
   return {
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(Object.keys(created_at).length ? { created_at } : {}),
-    ...(note
-      ? { requester: { full_name: { contains: note, mode: 'insensitive' as const } } }
-      : {}),
+    ...(note ? { requester: { full_name: { contains: note, mode: 'insensitive' as const } } } : {}),
   };
 }
 
@@ -310,7 +308,11 @@ export async function submitBenefit(
     throw new HttpError(400, 'A reason of at least 3 characters is required');
   }
   let documentUrl: string | null = null;
-  if (input.document_url !== undefined && input.document_url !== null && input.document_url !== '') {
+  if (
+    input.document_url !== undefined &&
+    input.document_url !== null &&
+    input.document_url !== ''
+  ) {
     if (typeof input.document_url !== 'string' || !DOCUMENT_PATH.test(input.document_url)) {
       throw new HttpError(400, 'Supporting document is invalid');
     }
@@ -700,10 +702,7 @@ export async function updateEmployment(
     if (actor.role !== Role.super_admin) {
       throw new HttpError(403, 'Only a Super Admin can change an email address');
     }
-    if (
-      typeof input.email !== 'string' ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())
-    ) {
+    if (typeof input.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) {
       throw new HttpError(400, 'Email is invalid');
     }
     data.email = input.email.trim().toLowerCase();

@@ -16,7 +16,9 @@ export default function SalaryPage() {
     medical: { limit: number; used: number; remaining: number };
     opd: { limit: number; used: number; remaining: number };
   } | null>(null);
-  const [leaves, setLeaves] = useState<{ allocated: number; used: number; leave_type: { name: string } }[]>([]);
+  const [leaves, setLeaves] = useState<
+    { allocated: number; used: number; leave_type: { name: string } }[]
+  >([]);
   const [error, setError] = useState('');
 
   useEffect(() => {

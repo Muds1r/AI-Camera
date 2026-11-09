@@ -85,9 +85,14 @@ export default function OperationsPage() {
 
       {tab === 'detections' ? (
         <ul className="space-y-2">
-          {!error && detections.length === 0 ? <p className="text-mute text-sm">No detections recorded.</p> : null}
+          {!error && detections.length === 0 ? (
+            <p className="text-mute text-sm">No detections recorded.</p>
+          ) : null}
           {detections.map((item) => (
-            <li key={item.id} className="border-line bg-paper rounded-xl border px-4 py-3 text-sm shadow-sm">
+            <li
+              key={item.id}
+              className="border-line bg-paper rounded-xl border px-4 py-3 text-sm shadow-sm"
+            >
               <p className="font-extrabold">{item.label}</p>
               <p className="text-mute">
                 {item.cameras?.name || 'Camera'} · {Math.round(Number(item.confidence) * 100)}% ·{' '}
@@ -98,9 +103,14 @@ export default function OperationsPage() {
         </ul>
       ) : (
         <ul className="space-y-2">
-          {!error && alerts.length === 0 ? <p className="text-mute text-sm">No alerts recorded.</p> : null}
+          {!error && alerts.length === 0 ? (
+            <p className="text-mute text-sm">No alerts recorded.</p>
+          ) : null}
           {alerts.map((item) => (
-            <li key={item.id} className="border-line bg-paper flex items-center justify-between rounded-xl border px-4 py-3 text-sm shadow-sm">
+            <li
+              key={item.id}
+              className="border-line bg-paper flex items-center justify-between rounded-xl border px-4 py-3 text-sm shadow-sm"
+            >
               <div>
                 <p className="font-extrabold">{item.message}</p>
                 <p className="text-mute">

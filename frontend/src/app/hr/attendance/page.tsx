@@ -27,7 +27,13 @@ interface Mine {
     absent: number;
   };
   today: { status: string; clock_in: string | null; clock_out: string | null } | null;
-  records: { id: string; work_date: string; status: string; clock_in: string | null; clock_out: string | null }[];
+  records: {
+    id: string;
+    work_date: string;
+    status: string;
+    clock_in: string | null;
+    clock_out: string | null;
+  }[];
 }
 
 interface Holiday {
@@ -95,7 +101,10 @@ export default function TeamAttendancePage() {
     event.preventDefault();
     setError('');
     try {
-      await apiJson('/api/holidays', { method: 'POST', body: JSON.stringify({ date, name, kind }) });
+      await apiJson('/api/holidays', {
+        method: 'POST',
+        body: JSON.stringify({ date, name, kind }),
+      });
       setMessage('Holiday saved.');
       setName('');
       const data = await apiJson<{ holidays: Holiday[] }>('/api/holidays');
@@ -141,12 +150,20 @@ export default function TeamAttendancePage() {
                 loadTeam(query, event.target.value).catch(() => undefined);
               }}
             />
-            <select className={`${fieldClass} max-w-40`} value={range} onChange={(event) => setRange(event.target.value as 'month' | 'week' | 'today')}>
+            <select
+              className={`${fieldClass} max-w-40`}
+              value={range}
+              onChange={(event) => setRange(event.target.value as 'month' | 'week' | 'today')}
+            >
               <option value="month">This month</option>
               <option value="week">This week</option>
               <option value="today">Today</option>
             </select>
-            <select className={`${fieldClass} max-w-40`} value={status} onChange={(event) => setStatus(event.target.value)}>
+            <select
+              className={`${fieldClass} max-w-40`}
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+            >
               <option value="">Any status</option>
               <option value="present">Present</option>
               <option value="late">Late</option>
@@ -182,27 +199,35 @@ export default function TeamAttendancePage() {
                     if (range === 'week') {
                       const date = new Date(`${day}T00:00:00Z`);
                       const now = new Date();
-                      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - now.getUTCDay()));
+                      const start = new Date(
+                        Date.UTC(
+                          now.getUTCFullYear(),
+                          now.getUTCMonth(),
+                          now.getUTCDate() - now.getUTCDay(),
+                        ),
+                      );
                       return date >= start;
                     }
                     return true;
                   })
                   .map((row) => (
-                  <tr key={row.id} className="border-line border-t">
-                    <td className="px-4 py-3 font-bold">
-                      {row.user.full_name}
-                      <span className="text-mute block font-medium">{row.user.department || ''}</span>
-                    </td>
-                    <td className="px-4 py-3">{row.work_date.slice(0, 10)}</td>
-                    <td className="px-4 py-3">
-                      <Badge status={row.status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.clock_in ? new Date(row.clock_in).toLocaleTimeString() : '—'} /{' '}
-                      {row.clock_out ? new Date(row.clock_out).toLocaleTimeString() : '—'}
-                    </td>
-                  </tr>
-                ))}
+                    <tr key={row.id} className="border-line border-t">
+                      <td className="px-4 py-3 font-bold">
+                        {row.user.full_name}
+                        <span className="text-mute block font-medium">
+                          {row.user.department || ''}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">{row.work_date.slice(0, 10)}</td>
+                      <td className="px-4 py-3">
+                        <Badge status={row.status} />
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.clock_in ? new Date(row.clock_in).toLocaleTimeString() : '—'} /{' '}
+                        {row.clock_out ? new Date(row.clock_out).toLocaleTimeString() : '—'}
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
@@ -212,7 +237,11 @@ export default function TeamAttendancePage() {
       {tab === 'mine' && mine ? (
         <>
           <div className="mb-4 flex gap-2">
-            <button className={buttonClass} type="button" onClick={() => clock('/api/attendance/clock-in')}>
+            <button
+              className={buttonClass}
+              type="button"
+              onClick={() => clock('/api/attendance/clock-in')}
+            >
               Clock in
             </button>
             <button
@@ -245,9 +274,25 @@ export default function TeamAttendancePage() {
             onSubmit={saveHoliday}
             className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-4"
           >
-            <input className={fieldClass} type="date" required value={date} onChange={(event) => setDate(event.target.value)} />
-            <input className={fieldClass} required placeholder="Name" value={name} onChange={(event) => setName(event.target.value)} />
-            <select className={fieldClass} value={kind} onChange={(event) => setKind(event.target.value as 'gazetted' | 'general_off')}>
+            <input
+              className={fieldClass}
+              type="date"
+              required
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              required
+              placeholder="Name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+            <select
+              className={fieldClass}
+              value={kind}
+              onChange={(event) => setKind(event.target.value as 'gazetted' | 'general_off')}
+            >
               <option value="gazetted">Gazetted</option>
               <option value="general_off">General off</option>
             </select>
@@ -257,12 +302,17 @@ export default function TeamAttendancePage() {
           </form>
           <ul className="space-y-2">
             {holidays.map((holiday) => (
-              <li key={holiday.id} className="border-line bg-paper flex justify-between rounded-xl border px-4 py-3 text-sm">
+              <li
+                key={holiday.id}
+                className="border-line bg-paper flex justify-between rounded-xl border px-4 py-3 text-sm"
+              >
                 <span className="font-bold">
                   {holiday.holiday_on.slice(0, 10)} · {holiday.name}
                 </span>
                 <span className="flex items-center gap-3">
-                  <span className="text-mute">{holiday.kind === 'gazetted' ? 'Gazetted' : 'General off'}</span>
+                  <span className="text-mute">
+                    {holiday.kind === 'gazetted' ? 'Gazetted' : 'General off'}
+                  </span>
                   <button
                     type="button"
                     className="text-danger font-bold"

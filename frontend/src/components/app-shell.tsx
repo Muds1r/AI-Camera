@@ -181,7 +181,9 @@ export function AppShell({
                   active ? 'bg-teal text-white' : 'text-white/90 hover:bg-white/10'
                 }`}
               >
-                <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${active ? 'bg-white' : 'bg-teal'}`} />
+                <span
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${active ? 'bg-white' : 'bg-teal'}`}
+                />
                 {link.label}
               </Link>
             );

@@ -69,22 +69,22 @@ export default function AttendancePage() {
         onChange={(event) => setMonth(event.target.value)}
       />
       {clockEnabled ? (
-      <div className="mb-4 flex gap-2">
-        <button
-          className="bg-teal rounded-md px-4 py-2 text-sm font-bold text-white"
-          type="button"
-          onClick={() => clock('/api/attendance/clock-in')}
-        >
-          Clock in
-        </button>
-        <button
-          className="border-line rounded-md border px-4 py-2 text-sm font-bold"
-          type="button"
-          onClick={() => clock('/api/attendance/clock-out')}
-        >
-          Clock out
-        </button>
-      </div>
+        <div className="mb-4 flex gap-2">
+          <button
+            className="bg-teal rounded-md px-4 py-2 text-sm font-bold text-white"
+            type="button"
+            onClick={() => clock('/api/attendance/clock-in')}
+          >
+            Clock in
+          </button>
+          <button
+            className="border-line rounded-md border px-4 py-2 text-sm font-bold"
+            type="button"
+            onClick={() => clock('/api/attendance/clock-out')}
+          >
+            Clock out
+          </button>
+        </div>
       ) : (
         <p className="text-mute mb-4 text-sm">Clock in is not enabled for this account.</p>
       )}

@@ -32,7 +32,9 @@ export default function ApprovalsPage() {
   const [to, setTo] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [pending, setPending] = useState<{ id: string; status: 'approved' | 'rejected' } | null>(null);
+  const [pending, setPending] = useState<{ id: string; status: 'approved' | 'rejected' } | null>(
+    null,
+  );
   const [note, setNote] = useState('');
 
   function load(next = tab, filters = { query, status, from, to }) {
@@ -205,7 +207,9 @@ export default function ApprovalsPage() {
           }}
         />
       </div>
-      {rows.length === 0 ? <p className="text-mute text-sm">No requests match these filters.</p> : null}
+      {rows.length === 0 ? (
+        <p className="text-mute text-sm">No requests match these filters.</p>
+      ) : null}
       <ul className="space-y-2">
         {rows.map((row) => (
           <li key={row.id} className="border-line bg-paper rounded-xl border p-4 text-sm shadow-sm">

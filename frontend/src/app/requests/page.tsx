@@ -129,7 +129,10 @@ export default function RequestsPage() {
   const visible = benefits.filter((item) => item.kind === kind);
 
   return (
-    <PageFrame title="Requests" description="Medical, OPD, and leave requests for your own account.">
+    <PageFrame
+      title="Requests"
+      description="Medical, OPD, and leave requests for your own account."
+    >
       <Notice error={error} message={message} />
       <div className="mb-5 flex flex-wrap gap-2">
         {(
@@ -165,16 +168,38 @@ export default function RequestsPage() {
             onSubmit={submitLeave}
             className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
           >
-            <select className={fieldClass} value={typeId} onChange={(event) => setTypeId(event.target.value)}>
+            <select
+              className={fieldClass}
+              value={typeId}
+              onChange={(event) => setTypeId(event.target.value)}
+            >
               {balances.map((item) => (
                 <option key={item.leave_type.id} value={item.leave_type.id}>
                   {item.leave_type.name}
                 </option>
               ))}
             </select>
-            <input className={fieldClass} type="date" required value={start} onChange={(event) => setStart(event.target.value)} />
-            <input className={fieldClass} type="date" required value={end} onChange={(event) => setEnd(event.target.value)} />
-            <textarea className={`${fieldClass} min-h-20 md:col-span-2`} required placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+            <input
+              className={fieldClass}
+              type="date"
+              required
+              value={start}
+              onChange={(event) => setStart(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              type="date"
+              required
+              value={end}
+              onChange={(event) => setEnd(event.target.value)}
+            />
+            <textarea
+              className={`${fieldClass} min-h-20 md:col-span-2`}
+              required
+              placeholder="Reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
             <button className={buttonClass} type="submit">
               Submit leave
             </button>
@@ -192,20 +217,46 @@ export default function RequestsPage() {
         <>
           {allowance ? (
             <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <Stat label="Medical remaining" value={allowance.medical.remaining} hint={`${allowance.medical.used} used of ${allowance.medical.limit}`} />
-              <Stat label="OPD remaining" value={allowance.opd.remaining} hint={`${allowance.opd.used} used of ${allowance.opd.limit}`} />
+              <Stat
+                label="Medical remaining"
+                value={allowance.medical.remaining}
+                hint={`${allowance.medical.used} used of ${allowance.medical.limit}`}
+              />
+              <Stat
+                label="OPD remaining"
+                value={allowance.opd.remaining}
+                hint={`${allowance.opd.used} used of ${allowance.opd.limit}`}
+              />
             </div>
           ) : null}
           <form
             onSubmit={submitClaim}
             className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
           >
-            <select className={fieldClass} value={kind} onChange={(event) => setKind(event.target.value as 'medical' | 'opd')}>
+            <select
+              className={fieldClass}
+              value={kind}
+              onChange={(event) => setKind(event.target.value as 'medical' | 'opd')}
+            >
               <option value="medical">Medical</option>
               <option value="opd">OPD</option>
             </select>
-            <input className={fieldClass} type="number" min="1" required placeholder="Amount" value={amount} onChange={(event) => setAmount(event.target.value)} />
-            <textarea className={`${fieldClass} min-h-20 md:col-span-2`} required placeholder="Reason" value={reason} onChange={(event) => setReason(event.target.value)} />
+            <input
+              className={fieldClass}
+              type="number"
+              min="1"
+              required
+              placeholder="Amount"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+            />
+            <textarea
+              className={`${fieldClass} min-h-20 md:col-span-2`}
+              required
+              placeholder="Reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
             <label className="text-xs font-bold uppercase md:col-span-2">
               Supporting document
               <input
@@ -243,7 +294,10 @@ function History({
   return (
     <ul className="space-y-2">
       {rows.map((row) => (
-        <li key={row.id} className="border-line bg-paper flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm">
+        <li
+          key={row.id}
+          className="border-line bg-paper flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm"
+        >
           <div>
             <p className="font-bold">{row.title}</p>
             <p className="text-mute">{row.detail}</p>

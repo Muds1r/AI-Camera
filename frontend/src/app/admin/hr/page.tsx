@@ -137,12 +137,34 @@ export default function HrAccountsPage() {
         ))}
       </ul>
       {selected ? (
-        <form onSubmit={saveHr} className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2">
+        <form
+          onSubmit={saveHr}
+          className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
+        >
           <h2 className="font-extrabold md:col-span-2">Update {selected.email}</h2>
-          <input className={fieldClass} value={selected.full_name} onChange={(event) => setSelected({ ...selected, full_name: event.target.value })} />
-          <input className={fieldClass} placeholder="Phone" value={phone} onChange={(event) => setPhone(event.target.value)} />
-          <input className={fieldClass} placeholder="Department" value={department} onChange={(event) => setDepartment(event.target.value)} />
-          <input className={fieldClass} placeholder="Designation" value={designation} onChange={(event) => setDesignation(event.target.value)} />
+          <input
+            className={fieldClass}
+            value={selected.full_name}
+            onChange={(event) => setSelected({ ...selected, full_name: event.target.value })}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Phone"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Department"
+            value={department}
+            onChange={(event) => setDepartment(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            placeholder="Designation"
+            value={designation}
+            onChange={(event) => setDesignation(event.target.value)}
+          />
           <button className={buttonClass} type="submit">
             Save HR account
           </button>
