@@ -5,7 +5,7 @@ import { publicUserSelect } from '../lib/auth/users';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
-import { login, logout, refreshSession } from '../services/auth.service';
+import { hrContactEmail, login, logout, refreshSession } from '../services/auth.service';
 
 const router = Router();
 
@@ -19,7 +19,16 @@ router.post(
   '/login',
   asyncHandler(async (req, res) => {
     const result = await login(req.body?.email, req.body?.password);
-    if (!result.ok) throw new HttpError(401, 'Invalid email or password');
+    if (!result.ok) {
+      if (result.reason === 'inactive') {
+        const hrEmail = await hrContactEmail();
+        throw new HttpError(403, 'Your account has been deactivated.', {
+          code: 'account_inactive',
+          hr_email: hrEmail,
+        });
+      }
+      throw new HttpError(401, 'Invalid email or password');
+    }
 
     setAuthCookies(res, result.accessToken, result.refreshToken);
     res.json({

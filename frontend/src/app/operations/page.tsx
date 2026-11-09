@@ -8,7 +8,7 @@ import {
   tabBarClass,
   tabIdleClass,
 } from '@/components/page-frame';
-import { Badge, Notice } from '@/components/widgets';
+import { EmptyState, ListRow, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 type Tab = 'detections' | 'alerts';
@@ -56,12 +56,9 @@ export default function OperationsPage() {
   }, []);
 
   return (
-    <PageFrame
-      title="Operational Data"
-      description="Detections and alerts recorded by the cameras."
-    >
+    <PageFrame title="Operations" description="Detections and alerts from camera systems.">
       <Notice error={error} />
-      <div className={`${tabBarClass} items-center`}>
+      <div className={`${tabBarClass} flex-wrap items-center`}>
         {(['detections', 'alerts'] as Tab[]).map((item) => (
           <button
             key={item}
@@ -74,7 +71,7 @@ export default function OperationsPage() {
         ))}
         {tab === 'alerts' ? (
           <select
-            className={`${fieldClass} max-w-40`}
+            className={`${fieldClass} ml-1 max-w-36 border-0 bg-transparent py-1.5 text-sm shadow-none ring-0`}
             value={severity}
             onChange={(event) => {
               setSeverity(event.target.value);
@@ -90,44 +87,40 @@ export default function OperationsPage() {
       </div>
 
       {tab === 'detections' ? (
-        <ul className="space-y-2">
-          {!error && detections.length === 0 ? (
-            <p className="text-mute text-sm">No detections recorded.</p>
-          ) : null}
+        <Feed empty={!error && detections.length === 0} emptyLabel="No detections recorded.">
           {detections.map((item) => (
-            <li
+            <ListRow
               key={item.id}
-              className="border-line bg-paper rounded-xl border px-4 py-3 text-sm shadow-sm"
-            >
-              <p className="font-extrabold">{item.label}</p>
-              <p className="text-mute">
-                {item.cameras?.name || 'Camera'} · {Math.round(Number(item.confidence) * 100)}% ·{' '}
-                {new Date(item.created_at).toLocaleString()}
-              </p>
-            </li>
+              title={item.label}
+              detail={`${item.cameras?.name || 'Camera'} · ${Math.round(Number(item.confidence) * 100)}% · ${new Date(item.created_at).toLocaleString()}`}
+            />
           ))}
-        </ul>
+        </Feed>
       ) : (
-        <ul className="space-y-2">
-          {!error && alerts.length === 0 ? (
-            <p className="text-mute text-sm">No alerts recorded.</p>
-          ) : null}
+        <Feed empty={!error && alerts.length === 0} emptyLabel="No alerts recorded.">
           {alerts.map((item) => (
-            <li
+            <ListRow
               key={item.id}
-              className="border-line bg-paper flex items-center justify-between rounded-xl border px-4 py-3 text-sm shadow-sm"
-            >
-              <div>
-                <p className="font-extrabold">{item.message}</p>
-                <p className="text-mute">
-                  {item.cameras?.name || 'Camera'} · {new Date(item.created_at).toLocaleString()}
-                </p>
-              </div>
-              <Badge status={item.severity} />
-            </li>
+              title={item.message}
+              detail={`${item.cameras?.name || 'Camera'} · ${new Date(item.created_at).toLocaleString()}`}
+              status={item.severity}
+            />
           ))}
-        </ul>
+        </Feed>
       )}
     </PageFrame>
   );
+}
+
+function Feed({
+  children,
+  empty,
+  emptyLabel,
+}: {
+  children: React.ReactNode;
+  empty: boolean;
+  emptyLabel: string;
+}) {
+  if (empty) return <EmptyState>{emptyLabel}</EmptyState>;
+  return <div className="space-y-2">{children}</div>;
 }

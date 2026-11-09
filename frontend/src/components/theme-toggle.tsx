@@ -50,7 +50,7 @@ export function ThemeToggle() {
       aria-label={label}
       title={label}
       suppressHydrationWarning
-      className="border-line bg-paper text-ink hover:bg-surface focus-visible:ring-primary/40 inline-flex h-9 w-9 items-center justify-center rounded-lg border transition focus-visible:ring-2 focus-visible:outline-none"
+      className="border-line bg-paper text-ink hover:bg-surface focus-visible:ring-primary/40 inline-flex h-9 w-9 items-center justify-center rounded-[var(--app-radius-md)] border shadow-[0_1px_2px_var(--app-shadow)] transition focus-visible:ring-2 focus-visible:outline-none"
     >
       {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
     </button>

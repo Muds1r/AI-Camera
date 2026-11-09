@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PageFrame } from '@/components/page-frame';
-import { Stat } from '@/components/widgets';
+import { MetricStrip, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 export default function SalaryPage() {
@@ -45,42 +45,43 @@ export default function SalaryPage() {
   return (
     <PageFrame
       title="Pay & Benefits"
-      description="Your salary and the medical allowance HR assigned. Claims are submitted under Requests."
+      description="Salary and allowance balances. Submit claims from Requests."
     >
-      {error ? <p className="text-danger text-sm font-bold">{error}</p> : null}
+      <Notice error={error} />
       {salary ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Basic" value={salary.basic.toLocaleString()} />
-          <Stat label="Allowance" value={salary.allowance.toLocaleString()} />
-          <Stat label="Deduction" value={salary.deduction.toLocaleString()} />
-          <Stat label="Net pay" value={salary.net.toLocaleString()} />
-        </div>
+        <MetricStrip
+          items={[
+            { label: 'Basic', value: salary.basic.toLocaleString() },
+            { label: 'Allowance', value: salary.allowance.toLocaleString() },
+            { label: 'Deduction', value: salary.deduction.toLocaleString() },
+            { label: 'Net pay', value: salary.net.toLocaleString() },
+          ]}
+        />
       ) : null}
       {benefits ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-2">
-          <Stat
-            label="Medical remaining"
-            value={benefits.medical.remaining}
-            hint={`${benefits.medical.used} used of ${benefits.medical.limit}`}
-          />
-          <Stat
-            label="OPD remaining"
-            value={benefits.opd.remaining}
-            hint={`${benefits.opd.used} used of ${benefits.opd.limit}`}
-          />
-        </div>
+        <MetricStrip
+          items={[
+            {
+              label: 'Medical remaining',
+              value: benefits.medical.remaining,
+              hint: `${benefits.medical.used} used of ${benefits.medical.limit}`,
+            },
+            {
+              label: 'OPD remaining',
+              value: benefits.opd.remaining,
+              hint: `${benefits.opd.used} used of ${benefits.opd.limit}`,
+            },
+          ]}
+        />
       ) : null}
       {leaves.length > 0 ? (
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          {leaves.map((item) => (
-            <Stat
-              key={item.leave_type.name}
-              label={item.leave_type.name}
-              value={item.allocated - item.used}
-              hint={`${item.used} used of ${item.allocated}`}
-            />
-          ))}
-        </div>
+        <MetricStrip
+          items={leaves.map((item) => ({
+            label: item.leave_type.name,
+            value: item.allocated - item.used,
+            hint: `${item.used} used of ${item.allocated}`,
+          }))}
+        />
       ) : null}
     </PageFrame>
   );
