@@ -1,45 +1,44 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { canAccessPath, safeNextPath } from '@/lib/auth/guards';
-import { ACCESS_COOKIE, parseSessionToken, REFRESH_COOKIE } from '@/lib/auth/tokens';
+import { parseSessionToken, readAccessTokenFromRequest, REFRESH_COOKIE } from '@/lib/auth/tokens';
 
 /**
- * Next.js 16 renamed middleware.ts to proxy.ts. This is the route guard:
- * it verifies the access token and sends people without a session to login,
- * or through the refresh endpoint when the refresh cookie is still valid.
+ * Route guard: valid access token (cookie or Bearer) required for protected routes.
+ * No valid access → try refresh cookie once, else /login.
  */
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  const session = await parseSessionToken(request.cookies.get(ACCESS_COOKIE)?.value);
-  const hasRefresh = Boolean(request.cookies.get(REFRESH_COOKIE)?.value);
+  const session = await parseSessionToken(readAccessTokenFromRequest(request));
 
-  if (pathname === '/login' && session) {
-    return NextResponse.redirect(
-      new URL(safeNextPath(request.nextUrl.searchParams.get('next')), request.url),
-    );
-  }
-
-  if (pathname === '/login' && !session && hasRefresh) {
-    const refreshUrl = new URL('/api/auth/refresh', request.url);
-    refreshUrl.searchParams.set('next', safeNextPath(request.nextUrl.searchParams.get('next')));
-    return NextResponse.redirect(refreshUrl);
+  if (pathname === '/login') {
+    if (session) {
+      return NextResponse.redirect(
+        new URL(safeNextPath(request.nextUrl.searchParams.get('next')), request.url),
+      );
+    }
+    return NextResponse.next();
   }
 
   const decision = canAccessPath(pathname, session?.role ?? null);
 
   if (decision === 'login') {
-    if (!pathname.startsWith('/api/') && hasRefresh) {
-      const refreshUrl = new URL('/api/auth/refresh', request.url);
-      refreshUrl.searchParams.set('next', `${pathname}${search}`);
-      return NextResponse.redirect(refreshUrl);
-    }
-
     if (pathname.startsWith('/api/')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const returnTo = `${pathname}${search}`;
+    const hasRefresh = Boolean(request.cookies.get(REFRESH_COOKIE)?.value?.trim());
+    if (hasRefresh && !pathname.startsWith('/api/auth/refresh')) {
+      const refreshUrl = new URL('/api/auth/refresh', request.url);
+      refreshUrl.searchParams.set('next', returnTo);
+      return NextResponse.redirect(refreshUrl);
+    }
+
     const loginUrl = new URL('/login', request.url);
-    loginUrl.searchParams.set('next', pathname);
+    if (pathname !== '/') {
+      loginUrl.searchParams.set('next', returnTo);
+    }
     return NextResponse.redirect(loginUrl);
   }
 

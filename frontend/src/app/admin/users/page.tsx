@@ -185,7 +185,7 @@ export default function AccountsPage() {
 
       <div className="border-mute/25 bg-paper overflow-hidden rounded-xl border">
         <table className="w-full text-left text-sm">
-          <thead className="bg-canvas text-mute text-xs tracking-wider uppercase">
+          <thead className="bg-surface text-mute text-xs tracking-wider uppercase">
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>

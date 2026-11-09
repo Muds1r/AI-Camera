@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PageFrame, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  fieldClass,
+  tabActiveClass,
+  tabBarClass,
+  tabIdleClass,
+} from '@/components/page-frame';
 import { Badge, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -55,13 +61,13 @@ export default function OperationsPage() {
       description="Detections and alerts recorded by the cameras."
     >
       <Notice error={error} />
-      <div className="mb-5 flex flex-wrap items-center gap-2">
+      <div className={`${tabBarClass} items-center`}>
         {(['detections', 'alerts'] as Tab[]).map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => setTab(item)}
-            className={`rounded-md px-3 py-1.5 text-sm font-bold ${tab === item ? 'bg-teal text-white' : 'border-line bg-paper border'}`}
+            className={tab === item ? tabActiveClass : tabIdleClass}
           >
             {item === 'detections' ? 'Detections' : 'Alerts'}
           </button>

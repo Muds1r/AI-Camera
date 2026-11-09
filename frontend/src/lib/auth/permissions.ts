@@ -69,7 +69,6 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     Permission.UsersManage,
     Permission.SalaryManage,
     Permission.CompanyManage,
-    Permission.AuditRead,
   ],
   super_admin: Object.values(Permission),
 };

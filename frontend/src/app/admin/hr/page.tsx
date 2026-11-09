@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
-import { ConfirmDialog, Notice } from '@/components/widgets';
+import { Notice, Switch } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import type { SessionUser } from '@/lib/auth/types';
 
@@ -16,7 +16,6 @@ export default function HrAccountsPage() {
   const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('');
   const [designation, setDesignation] = useState('');
-  const [confirming, setConfirming] = useState<SessionUser | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -48,14 +47,19 @@ export default function HrAccountsPage() {
     }
   }
 
-  async function toggle(person: SessionUser) {
-    await apiJson(`/api/users/${person.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_active: !person.is_active }),
-    });
-    setConfirming(null);
-    setMessage(person.is_active ? 'HR account deactivated.' : 'HR account activated.');
-    await load();
+  async function setActive(person: SessionUser, isActive: boolean) {
+    if (person.is_active === isActive) return;
+    setError('');
+    try {
+      await apiJson(`/api/users/${person.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: isActive }),
+      });
+      setMessage(isActive ? 'HR account activated.' : 'HR account deactivated.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update status');
+    }
   }
 
   async function saveHr(event: FormEvent) {
@@ -130,9 +134,16 @@ export default function HrAccountsPage() {
               {person.full_name}
               <span className="text-mute block font-medium">{person.email}</span>
             </button>
-            <button type="button" className="font-bold" onClick={() => setConfirming(person)}>
-              {person.is_active ? 'Deactivate' : 'Activate'}
-            </button>
+            <div className="flex items-center gap-2.5">
+              <Switch
+                checked={person.is_active}
+                onChange={(next) => setActive(person, next).catch(() => undefined)}
+                label={`${person.full_name} active`}
+              />
+              <span className="text-mute text-xs font-medium">
+                {person.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
           </li>
         ))}
       </ul>
@@ -170,16 +181,6 @@ export default function HrAccountsPage() {
           </button>
         </form>
       ) : null}
-      <ConfirmDialog
-        open={Boolean(confirming)}
-        title={confirming?.is_active ? 'Deactivate this HR account?' : 'Activate this HR account?'}
-        detail={confirming?.full_name}
-        confirmLabel={confirming?.is_active ? 'Deactivate' : 'Activate'}
-        onClose={() => setConfirming(null)}
-        onConfirm={() => {
-          if (confirming) toggle(confirming).catch(() => undefined);
-        }}
-      />
     </PageFrame>
   );
 }

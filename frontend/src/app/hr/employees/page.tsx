@@ -3,7 +3,14 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
-import { ConfirmDialog, Notice } from '@/components/widgets';
+import {
+  Notice,
+  Switch,
+  tableClass,
+  tableHeadClass,
+  tableRowClass,
+  tableWrapClass,
+} from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import type { SessionUser } from '@/lib/auth/types';
 
@@ -14,24 +21,33 @@ interface Balance {
   leave_type: { code: string; name: string };
 }
 
+function formatAmount(value: number) {
+  return value === 0 ? '' : String(value);
+}
+
+function parseAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  return Number(trimmed);
+}
+
 export default function EmployeesPage() {
   const [users, setUsers] = useState<SessionUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
   const [role, setRole] = useState('');
-  const [active, setActive] = useState('');
+  const [activeFilter, setActiveFilter] = useState('true');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [newRole, setNewRole] = useState<'employee' | 'dataview'>('employee');
   const [department, setDepartment] = useState('');
   const [designation, setDesignation] = useState('');
-  const [salary, setSalary] = useState('0');
-  const [allowance, setAllowance] = useState('0');
-  const [deduction, setDeduction] = useState('0');
-  const [medical, setMedical] = useState('0');
-  const [opd, setOpd] = useState('0');
+  const [salary, setSalary] = useState('');
+  const [allowance, setAllowance] = useState('');
+  const [medical, setMedical] = useState('');
+  const [opd, setOpd] = useState('');
   const [selected, setSelected] = useState<SessionUser | null>(null);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [phone, setPhone] = useState('');
@@ -39,17 +55,16 @@ export default function EmployeesPage() {
   const [info, setInfo] = useState('');
   const [editDepartment, setEditDepartment] = useState('');
   const [editDesignation, setEditDesignation] = useState('');
-  const [editSalary, setEditSalary] = useState('0');
-  const [editAllowance, setEditAllowance] = useState('0');
-  const [editDeduction, setEditDeduction] = useState('0');
-  const [editMedical, setEditMedical] = useState('0');
-  const [editOpd, setEditOpd] = useState('0');
+  const [editSalary, setEditSalary] = useState('');
+  const [editAllowance, setEditAllowance] = useState('');
+  const [editDeduction, setEditDeduction] = useState('');
+  const [editMedical, setEditMedical] = useState('');
+  const [editOpd, setEditOpd] = useState('');
   const [clockEnabled, setClockEnabled] = useState(true);
-  const [confirming, setConfirming] = useState<SessionUser | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  function load(nextPage = page, q = query, nextRole = role, nextActive = active) {
+  function load(nextPage = page, q = query, nextRole = role, nextActive = activeFilter) {
     const params = new URLSearchParams({ q, page: String(nextPage) });
     if (nextRole) params.set('role', nextRole);
     if (nextActive) params.set('active', nextActive);
@@ -60,7 +75,7 @@ export default function EmployeesPage() {
   }
 
   useEffect(() => {
-    load(1, '', '', '').catch((err: unknown) =>
+    load(1, '', '', 'true').catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,11 +95,10 @@ export default function EmployeesPage() {
           role: newRole,
           department,
           designation,
-          salary_basic: Number(salary),
-          salary_allowance: Number(allowance),
-          salary_deduction: Number(deduction),
-          medical_limit: Number(medical),
-          opd_limit: Number(opd),
+          salary_basic: parseAmount(salary),
+          salary_allowance: parseAmount(allowance),
+          medical_limit: parseAmount(medical),
+          opd_limit: parseAmount(opd),
           clock_enabled: newRole !== 'dataview',
         }),
       });
@@ -92,6 +106,12 @@ export default function EmployeesPage() {
       setFullName('');
       setEmail('');
       setPassword('');
+      setDepartment('');
+      setDesignation('');
+      setSalary('');
+      setAllowance('');
+      setMedical('');
+      setOpd('');
       await load(1);
       setPage(1);
     } catch (err) {
@@ -111,11 +131,11 @@ export default function EmployeesPage() {
     setInfo(data.user.info || '');
     setEditDepartment(data.user.department || '');
     setEditDesignation(data.user.designation || '');
-    setEditSalary(String(data.user.salary_basic));
-    setEditAllowance(String(data.user.salary_allowance));
-    setEditDeduction(String(data.user.salary_deduction));
-    setEditMedical(String(data.user.medical_limit));
-    setEditOpd(String(data.user.opd_limit));
+    setEditSalary(formatAmount(data.user.salary_basic));
+    setEditAllowance(formatAmount(data.user.salary_allowance));
+    setEditDeduction(formatAmount(data.user.salary_deduction));
+    setEditMedical(formatAmount(data.user.medical_limit));
+    setEditOpd(formatAmount(data.user.opd_limit));
     setClockEnabled(data.user.clock_enabled);
   }
 
@@ -137,11 +157,11 @@ export default function EmployeesPage() {
           info,
           department: editDepartment,
           designation: editDesignation,
-          salary_basic: Number(editSalary),
-          salary_allowance: Number(editAllowance),
-          salary_deduction: Number(editDeduction),
-          medical_limit: Number(editMedical),
-          opd_limit: Number(editOpd),
+          salary_basic: parseAmount(editSalary),
+          salary_allowance: parseAmount(editAllowance),
+          salary_deduction: parseAmount(editDeduction),
+          medical_limit: parseAmount(editMedical),
+          opd_limit: parseAmount(editOpd),
           clock_enabled: clockEnabled,
           leave_allocations,
         }),
@@ -153,14 +173,19 @@ export default function EmployeesPage() {
     }
   }
 
-  async function toggle(person: SessionUser) {
-    await apiJson(`/api/users/${person.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_active: !person.is_active }),
-    });
-    setConfirming(null);
-    setMessage(person.is_active ? 'Account deactivated.' : 'Account activated.');
-    await load();
+  async function setActive(person: SessionUser, isActive: boolean) {
+    if (person.is_active === isActive) return;
+    setError('');
+    try {
+      await apiJson(`/api/users/${person.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: isActive }),
+      });
+      setMessage(isActive ? 'Account activated.' : 'Account deactivated.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update status');
+    }
   }
 
   const pages = Math.max(1, Math.ceil(total / 20));
@@ -173,7 +198,7 @@ export default function EmployeesPage() {
       <Notice error={error} message={message} />
       <form
         onSubmit={create}
-        className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
+        className="border-line bg-paper mb-6 grid gap-3 rounded-2xl border p-5 md:grid-cols-2"
       >
         <input
           required
@@ -217,14 +242,6 @@ export default function EmployeesPage() {
           placeholder="Allowance"
           value={allowance}
           onChange={(event) => setAllowance(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          type="number"
-          min="0"
-          placeholder="Deduction"
-          value={deduction}
-          onChange={(event) => setDeduction(event.target.value)}
         />
         <input
           className={fieldClass}
@@ -286,23 +303,24 @@ export default function EmployeesPage() {
           <option value="dataview">DataView</option>
         </select>
         <select
-          className={`${fieldClass} max-w-40`}
-          value={active}
+          className={`${fieldClass} max-w-44`}
+          value={activeFilter}
           onChange={(event) => {
-            setActive(event.target.value);
+            setActiveFilter(event.target.value);
             setPage(1);
             load(1, query, role, event.target.value).catch(() => undefined);
           }}
+          aria-label="Filter by account status"
         >
-          <option value="">Any status</option>
+          <option value="">All statuses</option>
           <option value="true">Active</option>
           <option value="false">Inactive</option>
         </select>
       </div>
 
-      <div className="border-line bg-paper overflow-x-auto rounded-xl border shadow-sm">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-canvas text-mute text-xs font-bold uppercase">
+      <div className={tableWrapClass}>
+        <table className={tableClass}>
+          <thead className={tableHeadClass}>
             <tr>
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Role</th>
@@ -319,7 +337,7 @@ export default function EmployeesPage() {
               </tr>
             ) : null}
             {users.map((person) => (
-              <tr key={person.id} className="border-line border-t">
+              <tr key={person.id} className={tableRowClass}>
                 <td className="px-4 py-3 font-bold">
                   <button
                     type="button"
@@ -335,9 +353,16 @@ export default function EmployeesPage() {
                   {person.department || '—'} · {person.designation || '—'}
                 </td>
                 <td className="px-4 py-3">
-                  <button type="button" className="font-bold" onClick={() => setConfirming(person)}>
-                    {person.is_active ? 'Active' : 'Inactive'}
-                  </button>
+                  <div className="flex items-center gap-2.5">
+                    <Switch
+                      checked={person.is_active}
+                      onChange={(next) => setActive(person, next).catch(() => undefined)}
+                      label={`${person.full_name} active`}
+                    />
+                    <span className="text-mute text-xs font-medium">
+                      {person.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -377,7 +402,7 @@ export default function EmployeesPage() {
       {selected ? (
         <form
           onSubmit={savePerson}
-          className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
+          className="border-line bg-paper mt-6 grid gap-3 rounded-2xl border p-5 md:grid-cols-2"
         >
           <h2 className="font-extrabold md:col-span-2">{selected.full_name}</h2>
           <p className="text-mute text-sm md:col-span-2">{selected.email}</p>
@@ -466,16 +491,16 @@ export default function EmployeesPage() {
                 className={`${fieldClass} mt-1`}
                 type="number"
                 min="0"
-                value={item.allocated}
-                onChange={(event) =>
+                value={item.allocated === 0 ? '' : item.allocated}
+                onChange={(event) => {
+                  const raw = event.target.value;
+                  const next = raw.trim() === '' ? 0 : Number(raw);
                   setBalances((current) =>
                     current.map((balance) =>
-                      balance.id === item.id
-                        ? { ...balance, allocated: Number(event.target.value) }
-                        : balance,
+                      balance.id === item.id ? { ...balance, allocated: next } : balance,
                     ),
-                  )
-                }
+                  );
+                }}
               />
             </label>
           ))}
@@ -484,21 +509,6 @@ export default function EmployeesPage() {
           </button>
         </form>
       ) : null}
-
-      <ConfirmDialog
-        open={Boolean(confirming)}
-        title={confirming?.is_active ? 'Deactivate this account?' : 'Activate this account?'}
-        detail={
-          confirming
-            ? `${confirming.full_name} will ${confirming.is_active ? 'lose' : 'regain'} access.`
-            : undefined
-        }
-        confirmLabel={confirming?.is_active ? 'Deactivate' : 'Activate'}
-        onClose={() => setConfirming(null)}
-        onConfirm={() => {
-          if (confirming) toggle(confirming).catch(() => undefined);
-        }}
-      />
     </PageFrame>
   );
 }

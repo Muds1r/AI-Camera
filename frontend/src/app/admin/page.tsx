@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PageFrame } from '@/components/page-frame';
+import { PageFrame, linkMutedClass } from '@/components/page-frame';
 import { Stat } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -34,10 +34,10 @@ export default function AdminHome() {
         <p className="text-mute">Loading…</p>
       )}
       <div className="mt-6 flex gap-4 text-sm font-bold">
-        <Link className="text-teal" href="/admin/hr">
+        <Link className={linkMutedClass} href="/admin/hr">
           HR accounts
         </Link>
-        <Link className="text-teal" href="/admin/logs">
+        <Link className={linkMutedClass} href="/admin/logs">
           Activity log
         </Link>
       </div>

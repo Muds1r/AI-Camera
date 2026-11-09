@@ -1,3 +1,5 @@
+import { redirectToLogin } from '@/lib/auth/redirect';
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -30,13 +32,15 @@ export async function api(path: string, init?: RequestInit): Promise<Response> {
 
   const refreshed = await fetch('/api/auth/refresh', { method: 'POST' });
   if (!refreshed.ok) {
-    // Full load so the proxy sees the cleared cookies and leaves the protected page.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- session reset cannot stay on the current client route
-    window.location.href = '/login';
+    redirectToLogin();
     return response;
   }
 
-  return request();
+  const retry = await request();
+  if (retry.status === 401) {
+    redirectToLogin();
+  }
+  return retry;
 }
 
 export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {

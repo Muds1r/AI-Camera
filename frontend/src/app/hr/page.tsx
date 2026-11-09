@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PageFrame } from '@/components/page-frame';
+import { PageFrame, linkMutedClass } from '@/components/page-frame';
 import { Stat } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -44,19 +44,19 @@ export default function HrHome() {
         <p className="text-mute">Loading…</p>
       )}
       <div className="mt-6 flex flex-wrap gap-3 text-sm font-bold">
-        <Link className="text-teal" href="/hr/employees">
+        <Link className={linkMutedClass} href="/hr/employees">
           Employees
         </Link>
-        <Link className="text-teal" href="/hr/attendance">
+        <Link className={linkMutedClass} href="/hr/attendance">
           Attendance
         </Link>
-        <Link className="text-teal" href="/hr/holidays">
+        <Link className={linkMutedClass} href="/hr/holidays">
           Holidays
         </Link>
-        <Link className="text-teal" href="/hr/requests">
+        <Link className={linkMutedClass} href="/hr/requests">
           Approvals
         </Link>
-        <Link className="text-teal" href="/hr/company">
+        <Link className={linkMutedClass} href="/hr/company">
           Company
         </Link>
       </div>
