@@ -20,6 +20,36 @@ enum AlertSeverity {
   critical
 }
 
+enum Role {
+  employee
+  dataview
+  hr
+  super_admin
+}
+
+enum MedicalRequestStatus {
+  pending
+  approved
+  rejected
+}
+
+enum AttendanceStatus {
+  present
+  absent
+  late
+  half_day
+}
+
+enum HolidayKind {
+  gazetted
+  general_off
+}
+
+enum BenefitKind {
+  medical
+  opd
+}
+
 model Camera {
   id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name        String
@@ -64,4 +94,200 @@ model Alert {
   @@index([camera_id])
   @@index([created_at(sort: Desc)])
   @@map("alerts")
+}
+
+model Company {
+  id           String   @id @default("default")
+  name         String   @default("TruckFlow")
+  logo_url     String?
+  weekend_days String   @default("0")
+  work_start   String   @default("09:00")
+  updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@map("company")
+}
+
+model User {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email           String   @unique
+  password_hash   String
+  full_name       String
+  role            Role     @default(employee)
+  phone           String?
+  address         String?
+  id_card_number  String?  @unique
+  info            String?
+  avatar_url      String?
+  department      String?
+  designation     String?
+  salary_basic    Float    @default(0)
+  salary_allowance Float   @default(0)
+  salary_deduction Float   @default(0)
+  medical_limit   Float    @default(0)
+  opd_limit       Float    @default(0)
+  clock_enabled   Boolean  @default(true)
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now()) @db.Timestamptz(6)
+  updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  refresh_tokens     RefreshToken[]
+  attendance         Attendance[]
+  medical_requests   MedicalRequest[]         @relation("MedicalRequests")
+  reviewed_requests  MedicalRequest[]         @relation("ReviewedMedicalRequests")
+  leave_balances     LeaveBalance[]
+  leave_requests     LeaveRequest[]           @relation("LeaveRequests")
+  reviewed_leave     LeaveRequest[]           @relation("ReviewedLeave")
+  profile_requests   ProfileUpdateRequest[]   @relation("ProfileRequests")
+  reviewed_profiles  ProfileUpdateRequest[]   @relation("ReviewedProfiles")
+  audit_logs         AuditLog[]
+
+  @@index([role])
+  @@index([is_active])
+  @@map("users")
+}
+
+model RefreshToken {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String    @db.Uuid
+  token_hash  String    @unique
+  family_id   String    @db.Uuid
+  expires_at  DateTime  @db.Timestamptz(6)
+  revoked_at  DateTime? @db.Timestamptz(6)
+  replaced_by String?   @db.Uuid
+  created_at  DateTime  @default(now()) @db.Timestamptz(6)
+  user        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@index([family_id])
+  @@map("refresh_tokens")
+}
+
+model Attendance {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String           @db.Uuid
+  work_date  DateTime         @db.Date
+  clock_in   DateTime?        @db.Timestamptz(6)
+  clock_out  DateTime?        @db.Timestamptz(6)
+  status     AttendanceStatus @default(present)
+  note       String?
+  created_at DateTime         @default(now()) @db.Timestamptz(6)
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, work_date])
+  @@index([user_id])
+  @@index([work_date])
+  @@map("attendance")
+}
+
+model Holiday {
+  id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  holiday_on DateTime    @db.Date
+  name       String
+  kind       HolidayKind
+  created_at DateTime    @default(now()) @db.Timestamptz(6)
+
+  @@unique([holiday_on])
+  @@map("holidays")
+}
+
+model LeaveType {
+  id          String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code        String         @unique
+  name        String
+  default_days Int           @default(0)
+  is_active   Boolean        @default(true)
+  balances    LeaveBalance[]
+  requests    LeaveRequest[]
+
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String    @db.Uuid
+  leave_type_id String    @db.Uuid
+  allocated     Float     @default(0)
+  used          Float     @default(0)
+  user          User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  leave_type    LeaveType @relation(fields: [leave_type_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, leave_type_id])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id            String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id       String               @db.Uuid
+  leave_type_id String               @db.Uuid
+  start_date    DateTime             @db.Date
+  end_date      DateTime             @db.Date
+  days          Float
+  reason        String
+  status        MedicalRequestStatus @default(pending)
+  review_note   String?
+  reviewed_by   String?              @db.Uuid
+  reviewed_at   DateTime?            @db.Timestamptz(6)
+  created_at    DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at    DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  requester     User                 @relation("LeaveRequests", fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer      User?                @relation("ReviewedLeave", fields: [reviewed_by], references: [id], onDelete: SetNull)
+  leave_type    LeaveType            @relation(fields: [leave_type_id], references: [id])
+
+  @@index([user_id])
+  @@index([status])
+  @@map("leave_requests")
+}
+
+model ProfileUpdateRequest {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String               @db.Uuid
+  changes     Json
+  status      MedicalRequestStatus @default(pending)
+  review_note String?
+  reviewed_by String?              @db.Uuid
+  reviewed_at DateTime?            @db.Timestamptz(6)
+  created_at  DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  requester   User                 @relation("ProfileRequests", fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer    User?                @relation("ReviewedProfiles", fields: [reviewed_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([status])
+  @@map("profile_update_requests")
+}
+
+model AuditLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  actor_id    String?  @db.Uuid
+  action      String
+  target_type String
+  target_id   String?
+  detail      String?
+  created_at  DateTime @default(now()) @db.Timestamptz(6)
+  actor       User?    @relation(fields: [actor_id], references: [id], onDelete: SetNull)
+
+  @@index([created_at(sort: Desc)])
+  @@index([actor_id])
+  @@map("audit_logs")
+}
+
+model MedicalRequest {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String               @db.Uuid
+  kind         BenefitKind          @default(medical)
+  amount       Float                @default(0)
+  reason       String
+  document_url String?
+  status      MedicalRequestStatus @default(pending)
+  review_note String?
+  reviewed_by String?              @db.Uuid
+  reviewed_at DateTime?            @db.Timestamptz(6)
+  created_at  DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  requester   User                 @relation("MedicalRequests", fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer    User?                @relation("ReviewedMedicalRequests", fields: [reviewed_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([status])
+  @@map("medical_requests")
 }

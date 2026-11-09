@@ -1,7 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { supabase } from '../lib/supabase';
+import { Permission } from '../lib/auth/permissions';
+import { requireAuth, requirePermission } from '../middleware/auth';
 
 const router = Router();
+
+router.use(requireAuth, requirePermission(Permission.CamerasView));
 
 router.get('/', async (_req: Request, res: Response) => {
   try {
