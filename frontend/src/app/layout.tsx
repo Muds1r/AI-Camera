@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
-import { Geist_Mono, Manrope } from 'next/font/google';
+import { DM_Sans, Geist_Mono } from 'next/font/google';
+import { SessionGuard } from '@/components/session-guard';
+import { ThemeInit } from '@/components/theme-init';
 import './globals.css';
 
-const manrope = Manrope({
-  variable: '--font-manrope',
+const dmSans = DM_Sans({
+  variable: '--font-dm-sans',
   subsets: ['latin'],
 });
 
@@ -19,8 +21,16 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col font-sans">{children}</body>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${dmSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="bg-bg text-ink flex min-h-full flex-col font-sans">
+        <ThemeInit />
+        <SessionGuard />
+        {children}
+      </body>
     </html>
   );
 }

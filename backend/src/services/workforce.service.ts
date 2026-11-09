@@ -101,11 +101,27 @@ async function monthContext(year: number, month: number) {
   };
 }
 
+function parseClockTime(value: string): number {
+  const [hours, minutes] = value.split(':').map(Number);
+  return (hours || 0) * 60 + (minutes || 0);
+}
+
+/** Local wall-clock minutes (matches employee’s typical 9–5 window in their timezone). */
+function minutesOfDay(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
 function lateStatus(clockIn: Date, workStart: string) {
-  const [hours, minutes] = workStart.split(':').map(Number);
-  const startMinutes = (hours || 0) * 60 + (minutes || 0);
-  const clockMinutes = clockIn.getUTCHours() * 60 + clockIn.getUTCMinutes();
-  return clockMinutes > startMinutes ? 'late' : 'present';
+  return minutesOfDay(clockIn) > parseClockTime(workStart) ? 'late' : 'present';
+}
+
+function assertClockInWindow(now: Date, workStart: string, workEnd: string) {
+  const nowMinutes = minutesOfDay(now);
+  const start = parseClockTime(workStart);
+  const end = parseClockTime(workEnd);
+  if (nowMinutes < start || nowMinutes > end) {
+    throw new HttpError(400, `Clock in is only allowed between ${workStart} and ${workEnd}`);
+  }
 }
 
 export async function clockIn(userId: string) {
@@ -118,6 +134,7 @@ export async function clockIn(userId: string) {
   if (existing?.clock_in) throw new HttpError(409, 'You have already clocked in today');
   const company = await companySettings();
   const now = new Date();
+  assertClockInWindow(now, company.work_start, company.work_end);
   const status = lateStatus(now, company.work_start);
   const record = await prisma.attendance.upsert({
     where: { user_id_work_date: { user_id: userId, work_date: today } },
@@ -424,6 +441,29 @@ export async function leaveBalances(userId: string) {
     include: { leave_type: true },
     orderBy: { leave_type: { name: 'asc' } },
   });
+}
+
+export async function updateLeaveDefaults(actor: AuthUser, defaults: Record<string, unknown>) {
+  if (!roleHasPermission(actor.role, Permission.CompanyManage)) {
+    throw new HttpError(403, 'You cannot change leave defaults');
+  }
+  const types = await prisma.leaveType.findMany({ where: { is_active: true } });
+  let updated = false;
+  for (const type of types) {
+    if (defaults[type.code] === undefined) continue;
+    const days = Number(defaults[type.code]);
+    if (!Number.isFinite(days) || days < 0) {
+      throw new HttpError(400, `${type.name} must be zero or greater`);
+    }
+    await prisma.leaveType.update({
+      where: { id: type.id },
+      data: { default_days: Math.floor(days) },
+    });
+    updated = true;
+  }
+  if (!updated) throw new HttpError(400, 'No leave defaults to update');
+  await writeAudit(actor.id, 'leave.defaults', 'company', COMPANY_ID);
+  return prisma.leaveType.findMany({ where: { is_active: true }, orderBy: { name: 'asc' } });
 }
 
 export async function submitLeave(
@@ -820,11 +860,6 @@ export async function dashboardFor(actor: AuthUser) {
       }),
     ]);
   const todayCount = Object.fromEntries(todayRows.map((row) => [row.status, row._count._all]));
-  const activity = await prisma.auditLog.findMany({
-    orderBy: { created_at: 'desc' },
-    take: 8,
-    include: { actor: { select: { full_name: true } } },
-  });
   return {
     ...base,
     personal,
@@ -838,7 +873,6 @@ export async function dashboardFor(actor: AuthUser) {
       pendingMedical,
       pendingLeave,
       pendingProfile,
-      activity,
     },
   };
 }

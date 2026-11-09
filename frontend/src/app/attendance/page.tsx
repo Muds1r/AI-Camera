@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PageFrame, fieldClass } from '@/components/page-frame';
+import { PageFrame, buttonClass, buttonSecondaryClass, fieldClass } from '@/components/page-frame';
 import { Badge, Notice, Stat } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -60,7 +60,10 @@ export default function AttendancePage() {
   }
 
   return (
-    <PageFrame title="My attendance" description="Clock in, clock out, and review this month.">
+    <PageFrame
+      title="My attendance"
+      description="Clock in once per day between 9:00 AM and 5:00 PM (optional clock out). HR can see your clock-in time on the team report."
+    >
       <Notice error={error} message={message} />
       <input
         className={`${fieldClass} mb-4 max-w-48`}
@@ -71,14 +74,15 @@ export default function AttendancePage() {
       {clockEnabled ? (
         <div className="mb-4 flex gap-2">
           <button
-            className="bg-teal rounded-md px-4 py-2 text-sm font-bold text-white"
+            className={buttonClass}
             type="button"
+            disabled={Boolean(data?.today?.clock_in)}
             onClick={() => clock('/api/attendance/clock-in')}
           >
-            Clock in
+            {data?.today?.clock_in ? 'Clocked in today' : 'Clock in'}
           </button>
           <button
-            className="border-line rounded-md border px-4 py-2 text-sm font-bold"
+            className={buttonSecondaryClass}
             type="button"
             onClick={() => clock('/api/attendance/clock-out')}
           >
@@ -105,7 +109,7 @@ export default function AttendancePage() {
           </div>
           <div className="border-line bg-paper overflow-hidden rounded-xl border shadow-sm">
             <table className="w-full text-left text-sm">
-              <thead className="bg-canvas text-mute text-xs font-bold uppercase">
+              <thead className="bg-surface text-mute text-xs font-bold uppercase">
                 <tr>
                   <th className="px-4 py-3">Date</th>
                   <th className="px-4 py-3">Status</th>

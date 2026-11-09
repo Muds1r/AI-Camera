@@ -1,7 +1,15 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  buttonClass,
+  fieldClass,
+  tabActiveClass,
+  tabBarClass,
+  tabIdleClass,
+  linkMutedClass,
+} from '@/components/page-frame';
 import { Badge, Notice, Stat } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -134,7 +142,7 @@ export default function RequestsPage() {
       description="Medical, OPD, and leave requests for your own account."
     >
       <Notice error={error} message={message} />
-      <div className="mb-5 flex flex-wrap gap-2">
+      <div className={tabBarClass}>
         {(
           [
             ['benefits', 'Medical & OPD'],
@@ -145,7 +153,7 @@ export default function RequestsPage() {
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`rounded-md px-3 py-1.5 text-sm font-bold ${tab === id ? 'bg-teal text-white' : 'border-line bg-paper border'}`}
+            className={tab === id ? tabActiveClass : tabIdleClass}
           >
             {label}
           </button>
@@ -302,7 +310,7 @@ function History({
             <p className="font-bold">{row.title}</p>
             <p className="text-mute">{row.detail}</p>
             {row.href ? (
-              <a className="text-teal font-bold" href={row.href}>
+              <a className={linkMutedClass} href={row.href}>
                 View document
               </a>
             ) : null}

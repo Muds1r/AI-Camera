@@ -28,6 +28,7 @@ describe('role permissions', () => {
     expect(canAssignRole(Role.hr, Role.dataview)).toBe(true);
     expect(canAssignRole(Role.hr, Role.hr)).toBe(false);
     expect(canAssignRole(Role.hr, Role.super_admin)).toBe(false);
+    expect(roleHasPermission(Role.hr, Permission.AuditRead)).toBe(false);
   });
 
   it('lets Super Admin assign every role', () => {

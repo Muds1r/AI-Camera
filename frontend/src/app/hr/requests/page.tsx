@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PageFrame, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  buttonDangerClass,
+  buttonSuccessClass,
+  fieldClass,
+  tabActiveClass,
+  tabBarClass,
+  tabIdleClass,
+  linkMutedClass,
+} from '@/components/page-frame';
 import { Badge, ConfirmDialog, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
@@ -150,12 +159,12 @@ export default function ApprovalsPage() {
   return (
     <PageFrame title="Requests & Approvals" description="You cannot approve your own requests.">
       <Notice error={error} message={message} />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className={tabBarClass}>
         {TABS.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={`rounded-md px-3 py-1.5 text-sm font-bold ${tab === item.id ? 'bg-teal text-white' : 'border-line bg-paper border'}`}
+            className={tab === item.id ? tabActiveClass : tabIdleClass}
             onClick={() => {
               setTab(item.id);
               load(item.id).catch(() => undefined);
@@ -220,7 +229,7 @@ export default function ApprovalsPage() {
             <p className="text-mute mt-1">{row.detail}</p>
             {row.review_note ? <p className="mt-1 text-sm">Note: {row.review_note}</p> : null}
             {row.document_url ? (
-              <a className="text-teal mt-1 inline-block font-bold" href={row.document_url}>
+              <a className={`${linkMutedClass} mt-1 inline-block`} href={row.document_url}>
                 View document
               </a>
             ) : null}
@@ -228,7 +237,7 @@ export default function ApprovalsPage() {
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  className="bg-success rounded-md px-3 py-1.5 text-xs font-bold text-white"
+                  className={`${buttonSuccessClass} px-3 py-1.5 text-xs`}
                   onClick={() => {
                     setNote('');
                     setPending({ id: row.id, status: 'approved' });
@@ -238,7 +247,7 @@ export default function ApprovalsPage() {
                 </button>
                 <button
                   type="button"
-                  className="bg-danger rounded-md px-3 py-1.5 text-xs font-bold text-white"
+                  className={`${buttonDangerClass} px-3 py-1.5 text-xs`}
                   onClick={() => {
                     setNote('');
                     setPending({ id: row.id, status: 'rejected' });

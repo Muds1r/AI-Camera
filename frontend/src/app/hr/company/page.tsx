@@ -1,17 +1,38 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { usePathname } from 'next/navigation';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  buttonClass,
+  buttonSecondaryClass,
+  fieldClass,
+  sectionTitleClass,
+} from '@/components/page-frame';
 import { PictureField } from '@/components/picture-field';
-import { Notice } from '@/components/widgets';
+import { Card, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
+interface LeaveType {
+  id: string;
+  code: string;
+  name: string;
+  default_days: number;
+}
+
+function formatDays(value: number) {
+  return value === 0 ? '' : String(value);
+}
+
+function parseDays(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  return Number(trimmed);
+}
+
 export default function CompanyPage() {
-  const system = usePathname().startsWith('/admin');
-  const [name, setName] = useState('');
-  const [workStart, setWorkStart] = useState('09:00');
   const [weekend, setWeekend] = useState<string[]>(['0']);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveType[]>([]);
+  const [leaveDefaults, setLeaveDefaults] = useState<Record<string, string>>({});
   const [logo, setLogo] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -19,14 +40,19 @@ export default function CompanyPage() {
   const [message, setMessage] = useState('');
 
   useEffect(() => {
-    apiJson<{
-      company: { name: string; logo_url: string | null; weekend_days: string; work_start: string };
-    }>('/api/company').then((data) => {
-      setName(data.company.name);
-      setWorkStart(data.company.work_start);
-      setWeekend(data.company.weekend_days.split(',').filter(Boolean));
-      setLogo(data.company.logo_url);
-      setPreview(data.company.logo_url);
+    Promise.all([
+      apiJson<{ company: { logo_url: string | null; weekend_days: string } }>('/api/company'),
+      apiJson<{ types: LeaveType[] }>('/api/leave/types'),
+    ]).then(([companyRes, leaveRes]) => {
+      setWeekend(companyRes.company.weekend_days.split(',').filter(Boolean));
+      setLogo(companyRes.company.logo_url);
+      setPreview(companyRes.company.logo_url);
+      setLeaveTypes(leaveRes.types);
+      setLeaveDefaults(
+        Object.fromEntries(
+          leaveRes.types.map((type) => [type.code, formatDays(type.default_days)]),
+        ),
+      );
     });
   }, []);
 
@@ -37,8 +63,19 @@ export default function CompanyPage() {
     try {
       await apiJson('/api/company', {
         method: 'PATCH',
-        body: JSON.stringify({ name, work_start: workStart, weekend_days: weekend.join(',') }),
+        body: JSON.stringify({ weekend_days: weekend.join(',') }),
       });
+      const defaults = Object.fromEntries(
+        leaveTypes.map((type) => [type.code, parseDays(leaveDefaults[type.code] ?? '')]),
+      );
+      const updated = await apiJson<{ types: LeaveType[] }>('/api/leave/types', {
+        method: 'PATCH',
+        body: JSON.stringify({ defaults }),
+      });
+      setLeaveTypes(updated.types);
+      setLeaveDefaults(
+        Object.fromEntries(updated.types.map((type) => [type.code, formatDays(type.default_days)])),
+      );
       if (file) {
         const form = new FormData();
         form.append('picture', file);
@@ -50,7 +87,7 @@ export default function CompanyPage() {
         setPreview(uploaded.company.logo_url);
         setFile(null);
       }
-      setMessage('Company settings saved.');
+      setMessage('Settings saved.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save');
     }
@@ -65,71 +102,94 @@ export default function CompanyPage() {
 
   return (
     <PageFrame
-      title={system ? 'System Settings' : 'Company Settings'}
-      description="Company name, logo, work start, and weekend days. The name and logo appear on the login page and in the sidebar."
+      title="Company Settings"
+      description="Weekend days, default leave for new employees, and logo on sign-in and in the sidebar."
     >
       <Notice error={error} message={message} />
-      <form
-        onSubmit={save}
-        className="border-line bg-paper max-w-xl space-y-4 rounded-xl border p-5 shadow-sm"
-      >
-        <label className="block text-xs font-bold uppercase">
-          Company name
-          <input
-            className={`${fieldClass} mt-1`}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            required
-          />
-        </label>
-        <label className="block text-xs font-bold uppercase">
-          Work starts
-          <input
-            className={`${fieldClass} mt-1`}
-            type="time"
-            value={workStart}
-            onChange={(event) => setWorkStart(event.target.value)}
-            required
-          />
-        </label>
-        <fieldset>
-          <legend className="text-xs font-bold uppercase">Weekend days</legend>
-          <div className="mt-2 flex flex-wrap gap-3 text-sm">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => (
-              <label key={day} className="flex items-center gap-1 font-semibold">
+      <form onSubmit={save} className="grid max-w-2xl gap-6">
+        <Card title="Weekends">
+          <fieldset>
+            <legend className={sectionTitleClass}>Non-working days</legend>
+            <p className="text-mute mb-3 text-sm font-medium">
+              Used for attendance and leave day counts.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => {
+                const on = weekend.includes(String(index));
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    onClick={() =>
+                      setWeekend((current) =>
+                        on
+                          ? current.filter((item) => item !== String(index))
+                          : [...current, String(index)],
+                      )
+                    }
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                      on
+                        ? 'border-primary bg-primary text-primary-on shadow-sm'
+                        : 'border-line bg-paper text-mute hover:border-primary/40 hover:bg-primary-soft'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        </Card>
+
+        <Card title="Default leave (new employees)">
+          <p className="text-mute mb-4 text-sm font-medium">
+            Applied when HR creates an employee. You can still override per person on the employee
+            record.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {leaveTypes.map((type) => (
+              <label key={type.id} className="block">
+                <span className={sectionTitleClass}>{type.name}</span>
                 <input
-                  type="checkbox"
-                  checked={weekend.includes(String(index))}
+                  className={fieldClass}
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="Days"
+                  value={leaveDefaults[type.code] ?? ''}
                   onChange={(event) =>
-                    setWeekend((current) =>
-                      event.target.checked
-                        ? [...current, String(index)]
-                        : current.filter((item) => item !== String(index)),
-                    )
+                    setLeaveDefaults((current) => ({ ...current, [type.code]: event.target.value }))
                   }
                 />
-                {day}
               </label>
             ))}
           </div>
-        </fieldset>
-        <PictureField
-          preview={preview}
-          onFile={(next) => {
-            setFile(next);
-            setPreview((current) => {
-              if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
-              return next ? URL.createObjectURL(next) : logo;
-            });
-          }}
-        />
-        {logo ? (
-          <button type="button" className="text-danger text-sm font-bold" onClick={removeLogo}>
-            Remove logo
-          </button>
-        ) : null}
+        </Card>
+
+        <Card title="Logo">
+          <PictureField
+            preview={preview}
+            onFile={(next) => {
+              setFile(next);
+              setPreview((current) => {
+                if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+                return next ? URL.createObjectURL(next) : logo;
+              });
+            }}
+          />
+          {logo ? (
+            <button
+              type="button"
+              className={`${buttonSecondaryClass} text-danger border-danger/20 hover:bg-danger/5 mt-4`}
+              onClick={removeLogo}
+            >
+              Remove logo
+            </button>
+          ) : null}
+        </Card>
+
         <button className={buttonClass} type="submit">
-          Save branding
+          Save changes
         </button>
       </form>
     </PageFrame>
