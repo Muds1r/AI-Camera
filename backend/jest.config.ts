@@ -12,6 +12,7 @@ const config: Config = {
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   clearMocks: true,
+  setupFiles: ['<rootDir>/jest.setup.ts'],
 };
 
 export default config;
