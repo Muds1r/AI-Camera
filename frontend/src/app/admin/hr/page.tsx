@@ -12,14 +12,28 @@ import { PasswordField } from '@/components/password-field';
 import { Notice, Switch } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import type { SessionUser } from '@/lib/auth/types';
+import {
+  digitsOnly,
+  emailError,
+  firstError,
+  labelError,
+  nameError,
+  passwordError,
+  phoneError,
+  secondaryEmailError,
+  withoutDigits,
+} from '@/lib/fields';
 
 export default function HrAccountsPage() {
   const [users, setUsers] = useState<SessionUser[]>([]);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [accountPhone, setAccountPhone] = useState('');
+  const [accountSecondaryEmail, setAccountSecondaryEmail] = useState('');
   const [password, setPassword] = useState('');
   const [selected, setSelected] = useState<SessionUser | null>(null);
   const [phone, setPhone] = useState('');
+  const [secondaryEmail, setSecondaryEmail] = useState('');
   const [department, setDepartment] = useState('');
   const [designation, setDesignation] = useState('');
   const [error, setError] = useState('');
@@ -38,14 +52,34 @@ export default function HrAccountsPage() {
   async function create(event: FormEvent) {
     event.preventDefault();
     setError('');
+    const problem = firstError({
+      full_name: nameError(fullName),
+      email: emailError(email, true),
+      phone: phoneError(accountPhone, true),
+      secondary_email: secondaryEmailError(accountSecondaryEmail, email, true),
+      password: passwordError(password, true),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     try {
       await apiJson('/api/users', {
         method: 'POST',
-        body: JSON.stringify({ full_name: fullName, email, password, role: 'hr' }),
+        body: JSON.stringify({
+          full_name: fullName,
+          email,
+          phone: accountPhone,
+          secondary_email: accountSecondaryEmail,
+          password,
+          role: 'hr',
+        }),
       });
       setMessage('HR account created.');
       setFullName('');
       setEmail('');
+      setAccountPhone('');
+      setAccountSecondaryEmail('');
       setPassword('');
       await load();
     } catch (err) {
@@ -72,12 +106,24 @@ export default function HrAccountsPage() {
     event.preventDefault();
     if (!selected) return;
     setError('');
+    const problem = firstError({
+      full_name: nameError(selected.full_name),
+      phone: phoneError(phone, true),
+      secondary_email: secondaryEmailError(secondaryEmail, selected.email, true),
+      department: labelError(department, 'Department'),
+      designation: labelError(designation, 'Designation'),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     try {
       await apiJson(`/api/users/${selected.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           full_name: selected.full_name,
           phone,
+          secondary_email: secondaryEmail,
           department,
           designation,
         }),
@@ -90,23 +136,43 @@ export default function HrAccountsPage() {
   }
 
   return (
-    <PageFrame title="HR accounts" description="Only a Super Admin can create or deactivate HR.">
+    <PageFrame title="HR accounts" description="Create HR accounts and turn them on or off.">
       <Notice error={error} message={message} />
       <form onSubmit={create} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
         <input
           required
           className={fieldClass}
           placeholder="Full name"
+          maxLength={80}
           value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
+          onChange={(event) => setFullName(withoutDigits(event.target.value))}
         />
         <input
           required
           type="email"
           className={fieldClass}
-          placeholder="Email"
+          placeholder="Login email"
+          maxLength={254}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
+        />
+        <input
+          required
+          type="tel"
+          inputMode="numeric"
+          className={fieldClass}
+          placeholder="Phone, 10–12 digits"
+          maxLength={12}
+          value={accountPhone}
+          onChange={(event) => setAccountPhone(digitsOnly(event.target.value, 12))}
+        />
+        <input
+          required
+          type="email"
+          className={fieldClass}
+          placeholder="Secondary email"
+          value={accountSecondaryEmail}
+          onChange={(event) => setAccountSecondaryEmail(event.target.value)}
         />
         <PasswordField
           required
@@ -130,6 +196,7 @@ export default function HrAccountsPage() {
               onClick={() => {
                 setSelected(person);
                 setPhone(person.phone || '');
+                setSecondaryEmail(person.secondary_email || '');
                 setDepartment(person.department || '');
                 setDesignation(person.designation || '');
               }}
@@ -155,14 +222,27 @@ export default function HrAccountsPage() {
           <h2 className="text-ink text-sm font-medium md:col-span-2">Update {selected.email}</h2>
           <input
             className={fieldClass}
+            maxLength={80}
             value={selected.full_name}
-            onChange={(event) => setSelected({ ...selected, full_name: event.target.value })}
+            onChange={(event) =>
+              setSelected({ ...selected, full_name: withoutDigits(event.target.value) })
+            }
           />
           <input
             className={fieldClass}
-            placeholder="Phone"
+            type="tel"
+            inputMode="numeric"
+            placeholder="Phone, 10–12 digits"
+            maxLength={12}
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => setPhone(digitsOnly(event.target.value, 12))}
+          />
+          <input
+            className={fieldClass}
+            type="email"
+            placeholder="Secondary email"
+            value={secondaryEmail}
+            onChange={(event) => setSecondaryEmail(event.target.value)}
           />
           <input
             className={fieldClass}

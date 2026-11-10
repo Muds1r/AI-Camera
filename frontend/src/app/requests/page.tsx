@@ -13,6 +13,7 @@ import {
 } from '@/components/page-frame';
 import { EmptyState, ListRow, MetricStrip, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { documentFileError } from '@/lib/fields';
 
 type Tab = 'benefits' | 'leave';
 
@@ -202,6 +203,7 @@ export default function RequestsPage() {
               className={`${fieldClass} min-h-20 md:col-span-2`}
               required
               placeholder="Reason"
+              maxLength={2000}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
@@ -251,6 +253,7 @@ export default function RequestsPage() {
               min="1"
               required
               placeholder="Amount"
+              max={10000000}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
             />
@@ -258,6 +261,7 @@ export default function RequestsPage() {
               className={`${fieldClass} min-h-20 md:col-span-2`}
               required
               placeholder="Reason"
+              maxLength={2000}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
@@ -266,8 +270,23 @@ export default function RequestsPage() {
               <input
                 className={`${fieldClass} mt-1`}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                onChange={(event) => {
+                  const next = event.target.files?.[0] ?? null;
+                  if (!next) {
+                    setFile(null);
+                    return;
+                  }
+                  const message = documentFileError(next);
+                  if (message) {
+                    setError(message);
+                    event.target.value = '';
+                    setFile(null);
+                    return;
+                  }
+                  setError('');
+                  setFile(next);
+                }}
               />
             </label>
             <button className={buttonClass} type="submit">
