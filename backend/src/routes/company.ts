@@ -29,12 +29,14 @@ function present(company: {
   logo_url: string | null;
   weekend_days: string;
   work_start: string;
+  work_end: string;
 }) {
   return {
     name: APP_NAME,
     logo_url: company.logo_url,
     weekend_days: company.weekend_days,
     work_start: company.work_start,
+    work_end: company.work_end,
   };
 }
 

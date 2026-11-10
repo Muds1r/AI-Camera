@@ -23,6 +23,26 @@ import {
 } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import type { SessionUser } from '@/lib/auth/types';
+import {
+  BLOOD_GROUPS,
+  GENDERS,
+  choiceError,
+  dateInputValue,
+  dateOfBirthError,
+  digitsOnly,
+  emailError,
+  firstError,
+  idCardError,
+  joinedOnError,
+  labelError,
+  nameError,
+  notesError,
+  addressError,
+  passwordError,
+  phoneError,
+  secondaryEmailError,
+  withoutDigits,
+} from '@/lib/fields';
 
 interface Balance {
   id: string;
@@ -50,6 +70,12 @@ export default function EmployeesPage() {
   const [activeFilter, setActiveFilter] = useState('true');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [accountPhone, setAccountPhone] = useState('');
+  const [accountSecondaryEmail, setAccountSecondaryEmail] = useState('');
+  const [accountIdCard, setAccountIdCard] = useState('');
+  const [accountDob, setAccountDob] = useState('');
+  const [accountGender, setAccountGender] = useState('');
+  const [accountJoined, setAccountJoined] = useState('');
   const [password, setPassword] = useState('');
   const [newRole, setNewRole] = useState<'employee' | 'dataview'>('employee');
   const [department, setDepartment] = useState('');
@@ -61,6 +87,14 @@ export default function EmployeesPage() {
   const [selected, setSelected] = useState<SessionUser | null>(null);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [phone, setPhone] = useState('');
+  const [secondaryEmail, setSecondaryEmail] = useState('');
+  const [idCard, setIdCard] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [emergencyName, setEmergencyName] = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
+  const [joinedOn, setJoinedOn] = useState('');
   const [address, setAddress] = useState('');
   const [info, setInfo] = useState('');
   const [editDepartment, setEditDepartment] = useState('');
@@ -95,12 +129,41 @@ export default function EmployeesPage() {
     event.preventDefault();
     setError('');
     setMessage('');
+    const employee = newRole === 'employee';
+    const problem = firstError({
+      full_name: nameError(fullName),
+      email: emailError(email, true),
+      phone: phoneError(accountPhone, true),
+      secondary_email: secondaryEmailError(accountSecondaryEmail, email, true),
+      id_card_number: idCardError(accountIdCard, employee),
+      date_of_birth: dateOfBirthError(accountDob, employee),
+      gender: choiceError(
+        accountGender,
+        'Gender',
+        GENDERS.map((item) => item.value),
+        employee,
+      ),
+      joined_on: joinedOnError(accountJoined),
+      department: labelError(department, 'Department'),
+      designation: labelError(designation, 'Designation'),
+      password: passwordError(password, true),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     try {
       await apiJson('/api/users', {
         method: 'POST',
         body: JSON.stringify({
           full_name: fullName,
           email,
+          phone: accountPhone,
+          secondary_email: accountSecondaryEmail,
+          id_card_number: accountIdCard,
+          date_of_birth: accountDob,
+          gender: accountGender,
+          joined_on: accountJoined,
           password,
           role: newRole,
           department,
@@ -115,6 +178,12 @@ export default function EmployeesPage() {
       setMessage('Account created.');
       setFullName('');
       setEmail('');
+      setAccountPhone('');
+      setAccountSecondaryEmail('');
+      setAccountIdCard('');
+      setAccountDob('');
+      setAccountGender('');
+      setAccountJoined('');
       setPassword('');
       setDepartment('');
       setDesignation('');
@@ -137,6 +206,14 @@ export default function EmployeesPage() {
     setSelected(data.user);
     setBalances(data.balances);
     setPhone(data.user.phone || '');
+    setSecondaryEmail(data.user.secondary_email || '');
+    setIdCard(digitsOnly(data.user.id_card_number || '', 13));
+    setDateOfBirth(dateInputValue(data.user.date_of_birth));
+    setGender(data.user.gender || '');
+    setBloodGroup(data.user.blood_group || '');
+    setEmergencyName(data.user.emergency_contact_name || '');
+    setEmergencyPhone(digitsOnly(data.user.emergency_contact_phone || '', 12));
+    setJoinedOn(dateInputValue(data.user.joined_on));
     setAddress(data.user.address || '');
     setInfo(data.user.info || '');
     setEditDepartment(data.user.department || '');
@@ -154,6 +231,34 @@ export default function EmployeesPage() {
     if (!selected) return;
     setError('');
     setMessage('');
+    const employee = selected.role === 'employee';
+    const problem = firstError({
+      full_name: nameError(selected.full_name),
+      phone: phoneError(phone, true),
+      secondary_email: secondaryEmailError(secondaryEmail, selected.email, true),
+      id_card_number: idCardError(idCard, employee),
+      date_of_birth: dateOfBirthError(dateOfBirth, employee),
+      gender: choiceError(
+        gender,
+        'Gender',
+        GENDERS.map((item) => item.value),
+        employee,
+      ),
+      blood_group: choiceError(bloodGroup, 'Blood group', BLOOD_GROUPS, false),
+      emergency_contact_name: emergencyName.trim()
+        ? nameError(emergencyName, 'Emergency contact')
+        : '',
+      emergency_contact_phone: phoneError(emergencyPhone, false, 'Emergency phone'),
+      joined_on: joinedOnError(joinedOn),
+      address: addressError(address, false),
+      department: labelError(editDepartment, 'Department'),
+      designation: labelError(editDesignation, 'Designation'),
+      info: notesError(info),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     const leave_allocations = Object.fromEntries(
       balances.map((item) => [item.leave_type.code, item.allocated]),
     );
@@ -163,6 +268,14 @@ export default function EmployeesPage() {
         body: JSON.stringify({
           full_name: selected.full_name,
           phone,
+          secondary_email: secondaryEmail,
+          id_card_number: idCard,
+          date_of_birth: dateOfBirth,
+          gender,
+          blood_group: bloodGroup,
+          emergency_contact_name: emergencyName,
+          emergency_contact_phone: emergencyPhone,
+          joined_on: joinedOn,
           address,
           info,
           department: editDepartment,
@@ -206,23 +319,82 @@ export default function EmployeesPage() {
 
       <PageSection
         title="New account"
-        description="Employee or DataView — email is permanent once created."
+        description="Employees also need a 13-digit ID card, date of birth, and gender. Phone numbers are 10 to 12 digits."
       >
         <form onSubmit={create} className={`${formPanelClass} md:grid-cols-2`}>
           <input
             required
             className={fieldClass}
             placeholder="Full name"
+            maxLength={80}
             value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
+            onChange={(event) => setFullName(withoutDigits(event.target.value))}
           />
           <input
             required
             type="email"
             className={fieldClass}
-            placeholder="Email"
+            placeholder="Login email"
+            autoComplete="off"
+            maxLength={254}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
+          />
+          <input
+            required
+            type="tel"
+            inputMode="numeric"
+            className={fieldClass}
+            placeholder="Phone, 10–12 digits"
+            autoComplete="off"
+            maxLength={12}
+            value={accountPhone}
+            onChange={(event) => setAccountPhone(digitsOnly(event.target.value, 12))}
+          />
+          <input
+            required
+            type="email"
+            className={fieldClass}
+            placeholder="Secondary email"
+            autoComplete="off"
+            maxLength={254}
+            value={accountSecondaryEmail}
+            onChange={(event) => setAccountSecondaryEmail(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            inputMode="numeric"
+            placeholder="ID card, 13 digits"
+            maxLength={13}
+            value={accountIdCard}
+            onChange={(event) => setAccountIdCard(digitsOnly(event.target.value, 13))}
+          />
+          <input
+            className={fieldClass}
+            type="date"
+            aria-label="Date of birth"
+            value={accountDob}
+            onChange={(event) => setAccountDob(event.target.value)}
+          />
+          <select
+            className={fieldClass}
+            aria-label="Gender"
+            value={accountGender}
+            onChange={(event) => setAccountGender(event.target.value)}
+          >
+            <option value="">Gender</option>
+            {GENDERS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <input
+            className={fieldClass}
+            type="date"
+            aria-label="Joining date"
+            value={accountJoined}
+            onChange={(event) => setAccountJoined(event.target.value)}
           />
           <input
             className={fieldClass}
@@ -280,7 +452,7 @@ export default function EmployeesPage() {
             required
             value={password}
             onChange={setPassword}
-            placeholder="Temporary password"
+            placeholder="Password, letter and number"
           />
           <button className={buttonClass} type="submit">
             Create account
@@ -404,14 +576,92 @@ export default function EmployeesPage() {
             <p className="text-mute text-sm md:col-span-2">{selected.email}</p>
             <input
               className={fieldClass}
+              maxLength={80}
               value={selected.full_name}
-              onChange={(event) => setSelected({ ...selected, full_name: event.target.value })}
+              onChange={(event) =>
+                setSelected({ ...selected, full_name: withoutDigits(event.target.value) })
+              }
             />
             <input
               className={fieldClass}
-              placeholder="Phone"
+              type="tel"
+              inputMode="numeric"
+              placeholder="Phone, 10–12 digits"
+              maxLength={12}
               value={phone}
-              onChange={(event) => setPhone(event.target.value)}
+              onChange={(event) => setPhone(digitsOnly(event.target.value, 12))}
+            />
+            <input
+              className={fieldClass}
+              type="email"
+              placeholder="Secondary email"
+              maxLength={254}
+              value={secondaryEmail}
+              onChange={(event) => setSecondaryEmail(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              inputMode="numeric"
+              placeholder="ID card, 13 digits"
+              maxLength={13}
+              value={idCard}
+              onChange={(event) => setIdCard(digitsOnly(event.target.value, 13))}
+            />
+            <input
+              className={fieldClass}
+              type="date"
+              aria-label="Date of birth"
+              value={dateOfBirth}
+              onChange={(event) => setDateOfBirth(event.target.value)}
+            />
+            <select
+              className={fieldClass}
+              aria-label="Gender"
+              value={gender}
+              onChange={(event) => setGender(event.target.value)}
+            >
+              <option value="">Gender</option>
+              {GENDERS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={fieldClass}
+              aria-label="Blood group"
+              value={bloodGroup}
+              onChange={(event) => setBloodGroup(event.target.value)}
+            >
+              <option value="">Blood group</option>
+              {BLOOD_GROUPS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+            <input
+              className={fieldClass}
+              placeholder="Emergency contact name"
+              maxLength={80}
+              value={emergencyName}
+              onChange={(event) => setEmergencyName(withoutDigits(event.target.value))}
+            />
+            <input
+              className={fieldClass}
+              type="tel"
+              inputMode="numeric"
+              placeholder="Emergency phone, 10–12 digits"
+              maxLength={12}
+              value={emergencyPhone}
+              onChange={(event) => setEmergencyPhone(digitsOnly(event.target.value, 12))}
+            />
+            <input
+              className={fieldClass}
+              type="date"
+              aria-label="Joining date"
+              value={joinedOn}
+              onChange={(event) => setJoinedOn(event.target.value)}
             />
             <input
               className={fieldClass}

@@ -5,6 +5,22 @@ import { apiJson } from '@/lib/api';
 import { ROLE_LABELS, ROLES, type Role } from '@/lib/auth/permissions';
 import type { SessionUser } from '@/lib/auth/types';
 import {
+  GENDERS,
+  addressError,
+  choiceError,
+  dateOfBirthError,
+  digitsOnly,
+  emailError,
+  firstError,
+  idCardError,
+  nameError,
+  notesError,
+  passwordError,
+  phoneError,
+  secondaryEmailError,
+  withoutDigits,
+} from '@/lib/fields';
+import {
   buttonClass,
   DataPanel,
   fieldClass,
@@ -28,6 +44,9 @@ export default function AccountsPage() {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [secondaryEmail, setSecondaryEmail] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
   const [address, setAddress] = useState('');
   const [idCard, setIdCard] = useState('');
   const [info, setInfo] = useState('');
@@ -59,6 +78,28 @@ export default function AccountsPage() {
     event.preventDefault();
     setMessage('');
     setError('');
+    const employee = role === 'employee';
+    const problem = firstError({
+      full_name: nameError(fullName),
+      email: emailError(email, true),
+      phone: phoneError(phone, true),
+      secondary_email: secondaryEmailError(secondaryEmail, email, true),
+      date_of_birth: dateOfBirthError(dateOfBirth, employee),
+      gender: choiceError(
+        gender,
+        'Gender',
+        GENDERS.map((item) => item.value),
+        employee,
+      ),
+      id_card_number: idCardError(idCard, employee),
+      address: addressError(address, false),
+      info: notesError(info),
+      password: passwordError(password, true),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     try {
       const created = await apiJson<{ user: SessionUser }>('/api/users', {
         method: 'POST',
@@ -66,6 +107,9 @@ export default function AccountsPage() {
           full_name: fullName,
           email,
           phone,
+          secondary_email: secondaryEmail,
+          date_of_birth: dateOfBirth,
+          gender,
           address,
           id_card_number: idCard,
           info,
@@ -81,6 +125,9 @@ export default function AccountsPage() {
       setFullName('');
       setEmail('');
       setPhone('');
+      setSecondaryEmail('');
+      setDateOfBirth('');
+      setGender('');
       setAddress('');
       setIdCard('');
       setInfo('');
@@ -115,10 +162,7 @@ export default function AccountsPage() {
   }
 
   return (
-    <PageFrame
-      title="Accounts"
-      description="Super Admin can create any account type and assign any of the four roles."
-    >
+    <PageFrame title="Accounts" description="Create an account and assign one of the four roles.">
       <Notice error={error} message={message} />
       <PageSection title="Create account">
         <form onSubmit={createAccount} className={`${formPanelClass} md:grid-cols-2`}>
@@ -126,34 +170,72 @@ export default function AccountsPage() {
             required
             className={fieldClass}
             placeholder="Full name"
+            maxLength={80}
             value={fullName}
-            onChange={(event) => setFullName(event.target.value)}
+            onChange={(event) => setFullName(withoutDigits(event.target.value))}
           />
           <input
             required
             type="email"
             className={fieldClass}
             placeholder="Email"
+            maxLength={254}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
           <input
+            required
             className={fieldClass}
-            placeholder="Phone"
+            type="tel"
+            inputMode="numeric"
+            placeholder="Phone, 10–12 digits"
+            maxLength={12}
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => setPhone(digitsOnly(event.target.value, 12))}
+          />
+          <input
+            required
+            className={fieldClass}
+            type="email"
+            placeholder="Secondary email"
+            maxLength={254}
+            value={secondaryEmail}
+            onChange={(event) => setSecondaryEmail(event.target.value)}
           />
           <input
             className={fieldClass}
+            type="date"
+            aria-label="Date of birth"
+            value={dateOfBirth}
+            onChange={(event) => setDateOfBirth(event.target.value)}
+          />
+          <select
+            className={fieldClass}
+            aria-label="Gender"
+            value={gender}
+            onChange={(event) => setGender(event.target.value)}
+          >
+            <option value="">Gender</option>
+            {GENDERS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <input
+            className={fieldClass}
             placeholder="Address"
+            maxLength={300}
             value={address}
             onChange={(event) => setAddress(event.target.value)}
           />
           <input
             className={fieldClass}
-            placeholder="ID card number"
+            inputMode="numeric"
+            placeholder="ID card, 13 digits"
+            maxLength={13}
             value={idCard}
-            onChange={(event) => setIdCard(event.target.value)}
+            onChange={(event) => setIdCard(digitsOnly(event.target.value, 13))}
           />
           <textarea
             className={`${fieldClass} min-h-20 md:col-span-2`}
@@ -164,7 +246,7 @@ export default function AccountsPage() {
           <PasswordField
             required
             autoComplete="new-password"
-            placeholder="Temporary password"
+            placeholder="Temporary password, letter and number"
             value={password}
             onChange={setPassword}
           />

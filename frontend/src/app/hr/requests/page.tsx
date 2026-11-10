@@ -26,6 +26,35 @@ interface Row {
   review_note?: string | null;
 }
 
+const PROFILE_LABELS: Record<string, string> = {
+  full_name: 'Name',
+  phone: 'Phone',
+  secondary_email: 'Secondary email',
+  date_of_birth: 'Date of birth',
+  gender: 'Gender',
+  blood_group: 'Blood group',
+  id_card_number: 'ID card',
+  address: 'Address',
+  emergency_contact_name: 'Emergency contact',
+  emergency_contact_phone: 'Emergency phone',
+  department: 'Department',
+  designation: 'Designation',
+  info: 'Notes',
+  avatar_url: 'Picture',
+};
+
+function profileChangeDetail(changes: Record<string, string | null>) {
+  return Object.entries(changes)
+    .map(([key, value]) => {
+      const label = PROFILE_LABELS[key] ?? key.replaceAll('_', ' ');
+      if (key === 'avatar_url') return `${label}: updated`;
+      if (!value) return `${label}: cleared`;
+      if (key === 'gender') return `${label}: ${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+      return `${label}: ${value}`;
+    })
+    .join(' · ');
+}
+
 const TABS: { id: Tab; label: string }[] = [
   { id: 'medical', label: 'Medical' },
   { id: 'opd', label: 'OPD' },
@@ -117,9 +146,7 @@ export default function ApprovalsPage() {
           id: item.id,
           status: item.status,
           title: item.requester.full_name,
-          detail: Object.entries(item.changes)
-            .map(([key, value]) => `${key}: ${value ?? 'cleared'}`)
-            .join(', '),
+          detail: profileChangeDetail(item.changes),
           review_note: item.review_note,
         })),
       ),
@@ -158,7 +185,10 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <PageFrame title="Requests & Approvals" description="You cannot approve your own requests.">
+    <PageFrame
+      title="Requests & Approvals"
+      description="Review medical, leave, and profile updates. You cannot approve your own."
+    >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
         {TABS.map((item) => (
@@ -201,6 +231,7 @@ export default function ApprovalsPage() {
         <input
           className={`${fieldClass} max-w-40`}
           type="date"
+          aria-label="From date"
           value={from}
           onChange={(event) => {
             setFrom(event.target.value);
@@ -210,6 +241,7 @@ export default function ApprovalsPage() {
         <input
           className={`${fieldClass} max-w-40`}
           type="date"
+          aria-label="To date"
           value={to}
           onChange={(event) => {
             setTo(event.target.value);
@@ -266,7 +298,7 @@ export default function ApprovalsPage() {
         title={pending?.status === 'rejected' ? 'Reject this request?' : 'Approve this request?'}
         detail={
           pending?.status === 'rejected'
-            ? 'A reason is required. The employee keeps their current balance and profile.'
+            ? 'A reason is required. Their balance and profile stay as they are.'
             : 'Approved medical and leave requests update the remaining balances.'
         }
         confirmLabel={pending?.status === 'rejected' ? 'Reject' : 'Approve'}
