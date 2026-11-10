@@ -135,7 +135,7 @@ export default function TeamAttendancePage() {
   return (
     <PageFrame
       title="Attendance"
-      description="Team records, your own clock in and out, and gazette or general off days."
+      description="Team records, your own clock in and out, and gazetted or general off days."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
@@ -262,9 +262,10 @@ export default function TeamAttendancePage() {
             <button
               className={buttonSecondaryClass}
               type="button"
+              disabled={!mine.today?.clock_in || Boolean(mine.today.clock_out)}
               onClick={() => clock('/api/attendance/clock-out')}
             >
-              Clock out
+              {mine.today?.clock_out ? 'Clocked out' : 'Clock out'}
             </button>
           </div>
           <MetricStrip
@@ -272,7 +273,7 @@ export default function TeamAttendancePage() {
               { label: 'Today', value: mine.today?.status ?? 'Not clocked in' },
               { label: 'Working days', value: mine.summary.workingDays },
               {
-                label: 'Sundays',
+                label: 'Weekend days',
                 value: mine.summary.sundays,
                 hint: `${mine.summary.gazetted} gazetted · ${mine.summary.generalOff} off`,
               },

@@ -51,10 +51,10 @@ export default function SalaryPage() {
       {salary ? (
         <MetricStrip
           items={[
-            { label: 'Basic', value: salary.basic.toLocaleString() },
-            { label: 'Allowance', value: salary.allowance.toLocaleString() },
-            { label: 'Deduction', value: salary.deduction.toLocaleString() },
-            { label: 'Net pay', value: salary.net.toLocaleString() },
+            { label: 'Basic', value: `PKR ${salary.basic.toLocaleString()}` },
+            { label: 'Allowance', value: `PKR ${salary.allowance.toLocaleString()}` },
+            { label: 'Deduction', value: `PKR ${salary.deduction.toLocaleString()}` },
+            { label: 'Net pay', value: `PKR ${salary.net.toLocaleString()}` },
           ]}
         />
       ) : null}

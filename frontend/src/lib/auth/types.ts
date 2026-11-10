@@ -6,8 +6,15 @@ export interface SessionUser {
   full_name: string;
   role: Role;
   phone: string | null;
+  secondary_email: string | null;
   address: string | null;
   id_card_number: string | null;
+  date_of_birth: string | null;
+  gender: string | null;
+  blood_group: string | null;
+  emergency_contact_name: string | null;
+  emergency_contact_phone: string | null;
+  joined_on: string | null;
   info: string | null;
   avatar_url: string | null;
   department: string | null;

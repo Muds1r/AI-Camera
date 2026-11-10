@@ -43,6 +43,7 @@ export default function AttendancePage() {
   const [data, setData] = useState<AttendanceView | null>(null);
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
   const [clockEnabled, setClockEnabled] = useState(true);
+  const [hours, setHours] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -53,6 +54,9 @@ export default function AttendancePage() {
   useEffect(() => {
     apiJson<{ user: { clock_enabled: boolean } }>('/api/users/me')
       .then((res) => setClockEnabled(res.user.clock_enabled))
+      .catch(() => undefined);
+    apiJson<{ company: { work_start: string; work_end: string } }>('/api/company')
+      .then((res) => setHours(`${res.company.work_start} and ${res.company.work_end}`))
       .catch(() => undefined);
     load(month).catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
@@ -75,7 +79,11 @@ export default function AttendancePage() {
   return (
     <PageFrame
       title="Attendance"
-      description="Clock in once per day between 9:00 AM and 5:00 PM. HR can view your clock-in on the team report."
+      description={
+        hours
+          ? `Clock in once per day between ${hours}. HR can see it on the team report.`
+          : 'Clock in once per day during company hours. HR can see it on the team report.'
+      }
     >
       <Notice error={error} message={message} />
 
@@ -102,9 +110,10 @@ export default function AttendancePage() {
             <button
               className={buttonSecondaryClass}
               type="button"
+              disabled={!data?.today?.clock_in || Boolean(data.today.clock_out)}
               onClick={() => clock('/api/attendance/clock-out')}
             >
-              Clock out
+              {data?.today?.clock_out ? 'Clocked out' : 'Clock out'}
             </button>
           </div>
         ) : (
@@ -119,7 +128,7 @@ export default function AttendancePage() {
               { label: 'Today', value: data.today?.status ?? 'Not clocked in' },
               { label: 'Working days', value: data.summary.workingDays },
               {
-                label: 'Sundays & holidays',
+                label: 'Weekends & holidays',
                 value: data.summary.sundays + data.summary.gazetted + data.summary.generalOff,
                 hint: `${data.summary.gazetted} gazetted · ${data.summary.generalOff} general off`,
               },

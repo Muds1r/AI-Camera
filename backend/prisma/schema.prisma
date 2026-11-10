@@ -114,10 +114,17 @@ model User {
   password_hash   String
   full_name       String
   role            Role     @default(employee)
-  phone           String?
-  address         String?
-  id_card_number  String?  @unique
-  info            String?
+  phone                    String?
+  secondary_email          String?
+  address                  String?
+  id_card_number           String?   @unique
+  date_of_birth            DateTime? @db.Date
+  gender                   String?
+  blood_group              String?
+  emergency_contact_name   String?
+  emergency_contact_phone  String?
+  joined_on                DateTime? @db.Date
+  info                     String?
   avatar_url      String?
   department      String?
   designation     String?
