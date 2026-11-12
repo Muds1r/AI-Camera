@@ -35,6 +35,7 @@ describe('role permissions', () => {
 
   it('lets Finance approve employee claims and file claims for workers', () => {
     expect(roleHasPermission(Role.finance, Permission.MedicalReview)).toBe(true);
+    expect(roleHasPermission(Role.finance, Permission.MedicalSubmitOwn)).toBe(true);
     expect(roleHasPermission(Role.finance, Permission.MedicalSubmitFor)).toBe(true);
     expect(roleHasPermission(Role.finance, Permission.MedicalReviewOnBehalf)).toBe(false);
     expect(roleHasPermission(Role.finance, Permission.UsersRead)).toBe(true);

@@ -95,13 +95,12 @@ export function HrWorkspaceDashboard({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-mute text-sm leading-relaxed">
-                  Leave, overtime, attendance, and profile updates, plus medical and OPD claims
-                  finance filed for a worker. Employees send their own medical and OPD claims to
-                  Finance.
+                  Leave, overtime, attendance, and profile updates, plus medical and OPD claims from
+                  finance staff. Employees and HR send their own medical and OPD claims to Finance.
                 </p>
                 <ul className="text-mute mt-3 space-y-1.5 text-xs">
                   <li className="flex justify-between gap-4">
-                    <span>Filed medical &amp; OPD</span>
+                    <span>Finance medical &amp; OPD</span>
                     <span className="text-ink font-semibold tabular-nums">{hr.pendingMedical}</span>
                   </li>
                   <li className="flex justify-between gap-4">

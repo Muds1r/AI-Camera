@@ -92,6 +92,21 @@ export async function notifyUser(userId: string, notice: Notice): Promise<void> 
   await safely(() => writeFor([userId], notice));
 }
 
+export function notifyFinanceOwnSubmitted(input: {
+  actorId: string;
+  requesterName: string;
+  kind: string;
+  amount: number;
+  reason: string;
+}): Promise<void> {
+  const label = benefitLabel(input.kind);
+  return notifyReviewers(input.actorId, {
+    kind: NotificationKind.request_submitted,
+    title: `${label} claim from finance`,
+    body: `${input.requesterName} requested ${money(input.amount)}. ${clip(input.reason, 120)}`,
+    href: input.kind === 'opd' ? '/hr/requests?tab=opd' : '/hr/requests?tab=medical',
+  });
+}
 export function notifyBenefitSubmitted(input: {
   actorId: string;
   requesterName: string;
@@ -106,36 +121,6 @@ export function notifyBenefitSubmitted(input: {
     body: `${input.requesterName} requested ${money(input.amount)}. ${clip(input.reason, 120)}`,
     href: input.kind === 'opd' ? '/finance/claims?tab=opd' : '/finance/claims?tab=medical',
   });
-}
-
-export function notifyBenefitOnBehalf(input: {
-  actorId: string;
-  filerName: string;
-  employeeId: string;
-  employeeName: string;
-  kind: string;
-  amount: number;
-  reason: string;
-}): Promise<void> {
-  const label = benefitLabel(input.kind);
-  const href =
-    input.kind === 'opd'
-      ? '/requests?tab=benefits&kind=opd'
-      : '/requests?tab=benefits&kind=medical';
-  return Promise.all([
-    notifyReviewers(input.actorId, {
-      kind: NotificationKind.request_submitted,
-      title: `${label} claim filed for ${input.employeeName}`,
-      body: `${input.filerName} filed ${money(input.amount)} for ${input.employeeName}. ${clip(input.reason, 120)}`,
-      href: input.kind === 'opd' ? '/hr/requests?tab=opd' : '/hr/requests?tab=medical',
-    }),
-    notifyUser(input.employeeId, {
-      kind: NotificationKind.request_submitted,
-      title: `${label} claim filed for you`,
-      body: `${input.filerName} filed a ${label} claim for ${money(input.amount)}. HR will review it.`,
-      href,
-    }),
-  ]).then(() => undefined);
 }
 
 export function notifyBenefitFiler(input: {
@@ -165,6 +150,7 @@ export function notifyBenefitDecided(input: {
   amount: number;
   status: Decision;
   reviewNote: string | null;
+  audience?: 'finance';
 }): Promise<void> {
   const label = benefitLabel(input.kind);
   const decision = input.status === 'approved' ? 'approved' : 'rejected';
@@ -176,9 +162,13 @@ export function notifyBenefitDecided(input: {
       input.reviewNote,
     ),
     href:
-      input.kind === 'opd'
-        ? '/requests?tab=benefits&kind=opd'
-        : '/requests?tab=benefits&kind=medical',
+      input.audience === 'finance'
+        ? input.kind === 'opd'
+          ? '/finance/claims?tab=opd'
+          : '/finance/claims?tab=medical'
+        : input.kind === 'opd'
+          ? '/requests?tab=benefits&kind=opd'
+          : '/requests?tab=benefits&kind=medical',
   });
 }
 
