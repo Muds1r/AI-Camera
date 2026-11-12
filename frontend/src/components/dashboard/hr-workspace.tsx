@@ -12,6 +12,7 @@ export type HrDashboardSlice = {
   absentToday: number;
   pendingMedical: number;
   pendingLeave: number;
+  pendingOvertime: number;
   pendingProfile: number;
 };
 
@@ -30,7 +31,7 @@ export function HrWorkspaceDashboard({
   hr: HrDashboardSlice;
   personal: HrPersonalSlice;
 }) {
-  const pendingTotal = hr.pendingMedical + hr.pendingLeave + hr.pendingProfile;
+  const pendingTotal = hr.pendingMedical + hr.pendingLeave + hr.pendingOvertime + hr.pendingProfile;
   const presentPct =
     hr.employees > 0 ? Math.min(100, Math.round((hr.presentToday / hr.employees) * 100)) : 0;
 
@@ -94,16 +95,24 @@ export function HrWorkspaceDashboard({
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-mute text-sm leading-relaxed">
-                  Medical, leave, and profile updates waiting for your decision.
+                  Leave, overtime, attendance, and profile updates, plus medical and OPD claims
+                  finance filed for a worker. Employees send their own medical and OPD claims to
+                  Finance.
                 </p>
                 <ul className="text-mute mt-3 space-y-1.5 text-xs">
                   <li className="flex justify-between gap-4">
-                    <span>Medical &amp; OPD</span>
+                    <span>Filed medical &amp; OPD</span>
                     <span className="text-ink font-semibold tabular-nums">{hr.pendingMedical}</span>
                   </li>
                   <li className="flex justify-between gap-4">
                     <span>Leave</span>
                     <span className="text-ink font-semibold tabular-nums">{hr.pendingLeave}</span>
+                  </li>
+                  <li className="flex justify-between gap-4">
+                    <span>Overtime</span>
+                    <span className="text-ink font-semibold tabular-nums">
+                      {hr.pendingOvertime}
+                    </span>
                   </li>
                   <li className="flex justify-between gap-4">
                     <span>Profile updates</span>

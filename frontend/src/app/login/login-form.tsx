@@ -14,19 +14,16 @@ type LoginErrorBody = {
   error?: string;
   code?: string;
   hr_email?: string | null;
+  message?: string;
 };
-
-type ResetChannel = 'phone' | 'secondary_email';
 
 export function LoginForm() {
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<'sign-in' | 'forgot'>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
-  const [channel, setChannel] = useState<ResetChannel>('secondary_email');
-  const [otp, setOtp] = useState('');
-  const [nextPassword, setNextPassword] = useState('');
   const [error, setError] = useState('');
   const [resetNote, setResetNote] = useState('');
   const [pending, setPending] = useState(false);
@@ -55,7 +52,7 @@ export function LoginForm() {
         body: JSON.stringify({
           email: companyEmail,
           password,
-          rememberMe,
+          rememberMe: remember,
         }),
       });
       const data = (await response.json().catch(() => null)) as LoginErrorBody | null;
@@ -77,11 +74,32 @@ export function LoginForm() {
     }
   }
 
-  function onForgot(event: FormEvent) {
+  async function onForgot(event: FormEvent) {
     event.preventDefault();
-    setResetNote(
-      'Reset codes are not sent yet. The phone number and secondary email saved on the account are ready for this once mail and SMS are connected.',
-    );
+    setError('');
+    setResetNote('');
+    setPending(true);
+    try {
+      const response = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+      const data = (await response.json().catch(() => null)) as LoginErrorBody | null;
+      if (!response.ok) {
+        setError(data?.error || 'Could not reset the password');
+        setPending(false);
+        return;
+      }
+      setResetNote(
+        data?.message ||
+          'If an account exists with a recovery email on file, a new password was sent there.',
+      );
+    } catch {
+      setError('Could not reach the server');
+    } finally {
+      setPending(false);
+    }
   }
 
   return (
@@ -131,6 +149,14 @@ export function LoginForm() {
               onChange={setPassword}
             />
           </div>
+          <label className="text-ink mb-5 flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={(event) => setRemember(event.target.checked)}
+            />
+            Remember this device
+          </label>
           <button
             type="button"
             className="text-mute hover:text-ink mb-5 text-sm font-medium"
@@ -161,7 +187,7 @@ export function LoginForm() {
           <div className="mb-6">
             <h1 className="text-ink text-lg font-semibold tracking-tight">Reset password</h1>
             <p className="text-mute mt-1 text-sm">
-              A code will go to the phone number or secondary email on the account.
+              A new password is emailed to the secondary address saved on the account.
             </p>
           </div>
 
@@ -175,63 +201,29 @@ export function LoginForm() {
             className={`${fieldClass} mb-4`}
           />
 
-          <fieldset className="mb-4">
-            <legend className={labelClass}>Send the code to</legend>
-            <label className="mt-2 flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="reset-channel"
-                checked={channel === 'secondary_email'}
-                onChange={() => setChannel('secondary_email')}
-              />
-              Secondary email
-            </label>
-            <label className="mt-2 flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="reset-channel"
-                checked={channel === 'phone'}
-                onChange={() => setChannel('phone')}
-              />
-              Phone number
-            </label>
-          </fieldset>
-
-          <label className={labelClass}>Code</label>
-          <input
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            maxLength={8}
-            placeholder="One-time code"
-            value={otp}
-            onChange={(event) => setOtp(event.target.value)}
-            className={`${fieldClass} mb-4`}
-          />
-
-          <label className={labelClass}>New password</label>
-          <div className="mb-5">
-            <PasswordField
-              autoComplete="new-password"
-              placeholder="New password"
-              value={nextPassword}
-              onChange={setNextPassword}
-            />
-          </div>
-
           {resetNote ? (
             <p className="border-line bg-surface text-ink mb-4 rounded-lg border px-3 py-2 text-sm">
               {resetNote}
             </p>
           ) : null}
+          {error ? (
+            <p
+              className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200"
+              role="alert"
+            >
+              {error}
+            </p>
+          ) : null}
 
-          <button type="submit" className={`${buttonClass} w-full`}>
-            Reset password
+          <button type="submit" disabled={pending} className={`${buttonClass} w-full`}>
+            {pending ? 'Sending…' : 'Email a new password'}
           </button>
           <button
             type="button"
             className="text-mute hover:text-ink mt-4 w-full text-sm font-medium"
             onClick={() => {
               setResetNote('');
+              setError('');
               setMode('sign-in');
             }}
           >

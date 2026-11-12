@@ -7,7 +7,17 @@ import { Card } from '@/components/widgets';
 const LINKS = [
   { href: '/hr/employees', label: 'Employees', detail: 'Accounts, roles, and compensation' },
   { href: '/hr/attendance', label: 'Attendance', detail: 'Team records, holidays, and your clock' },
-  { href: '/hr/requests', label: 'Approvals', detail: 'Medical, OPD, leave, and profile updates' },
+  {
+    href: '/hr/requests',
+    label: 'Approvals',
+    detail: 'Leave, overtime, attendance, and claims finance filed',
+  },
+  {
+    href: '/hr/announcements',
+    label: 'Announcements',
+    detail: 'News with a title, photos, and text',
+  },
+  { href: '/policies', label: 'Policies', detail: 'Company SOPs everyone can read' },
   { href: '/hr/company', label: 'Company', detail: 'Logo, weekends, and leave defaults' },
 ] as const;
 

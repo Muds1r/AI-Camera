@@ -1,10 +1,32 @@
-import { BenefitKind, HolidayKind, MedicalRequestStatus, Prisma, Role } from '@prisma/client';
+import {
+  BenefitKind,
+  HolidayKind,
+  MedicalRequestStatus,
+  Prisma,
+  Role,
+  AttendanceStatus,
+} from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
 import { writeAudit } from '../lib/audit';
+import {
+  notifyBenefitDecided,
+  notifyBenefitFiler,
+  notifyBenefitOnBehalf,
+  notifyBenefitSubmitted,
+  notifyLeaveDecided,
+  notifyLeaveSubmitted,
+  notifyOvertimeDecided,
+  notifyOvertimeSubmitted,
+  notifyAttendanceDecided,
+  notifyAttendanceSubmitted,
+  notifyProfileDecided,
+  notifyProfileSubmitted,
+} from '../lib/notifications';
 import { AuthUser } from '../lib/auth/session';
 import { roleHasPermission, Permission } from '../lib/auth/permissions';
-import { assertEmail, publicUserSelect } from '../lib/auth/users';
+import { assertEmail, assertPassword, publicUserSelect } from '../lib/auth/users';
+import { hashPassword } from '../lib/auth/passwords';
 import {
   BLOOD_GROUPS,
   GENDERS,
@@ -125,17 +147,39 @@ function minutesOfDay(date: Date): number {
   return date.getHours() * 60 + date.getMinutes();
 }
 
-function lateStatus(clockIn: Date, workStart: string) {
-  return minutesOfDay(clockIn) > parseClockTime(workStart) ? 'late' : 'present';
+function lateStatus(clockIn: Date, workStart: string, workEnd: string) {
+  return isLate(clockIn, workStart, workEnd) ? 'late' : 'present';
+}
+
+function shiftWindow(
+  shift: string,
+  company: { work_start: string; work_end: string; night_start: string; night_end: string },
+) {
+  return shift === 'night'
+    ? { start: company.night_start, end: company.night_end }
+    : { start: company.work_start, end: company.work_end };
 }
 
 function assertClockInWindow(now: Date, workStart: string, workEnd: string) {
   const nowMinutes = minutesOfDay(now);
   const start = parseClockTime(workStart);
   const end = parseClockTime(workEnd);
-  if (nowMinutes < start || nowMinutes > end) {
+  const inside =
+    start <= end
+      ? nowMinutes >= start && nowMinutes <= end
+      : nowMinutes >= start || nowMinutes <= end;
+  if (!inside) {
     throw new HttpError(400, `Clock in is only allowed between ${workStart} and ${workEnd}`);
   }
+}
+
+function isLate(clockIn: Date, workStart: string, workEnd: string) {
+  const nowMinutes = minutesOfDay(clockIn);
+  const start = parseClockTime(workStart);
+  const end = parseClockTime(workEnd);
+  if (start <= end) return nowMinutes > start;
+  if (nowMinutes >= start) return nowMinutes > start;
+  return end > 0;
 }
 
 export async function clockIn(userId: string) {
@@ -147,9 +191,10 @@ export async function clockIn(userId: string) {
   });
   if (existing?.clock_in) throw new HttpError(409, 'You have already clocked in today');
   const company = await companySettings();
+  const window = shiftWindow(user.shift, company);
   const now = new Date();
-  assertClockInWindow(now, company.work_start, company.work_end);
-  const status = lateStatus(now, company.work_start);
+  assertClockInWindow(now, window.start, window.end);
+  const status = lateStatus(now, window.start, window.end);
   const record = await prisma.attendance.upsert({
     where: { user_id_work_date: { user_id: userId, work_date: today } },
     update: { clock_in: now, status },
@@ -160,10 +205,26 @@ export async function clockIn(userId: string) {
 }
 
 export async function clockOut(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { shift: true },
+  });
   const today = utcDate();
-  const existing = await prisma.attendance.findUnique({
+  let existing = await prisma.attendance.findUnique({
     where: { user_id_work_date: { user_id: userId, work_date: today } },
   });
+  if (existing?.clock_out) throw new HttpError(409, 'You have already clocked out today');
+  if (!existing?.clock_in && user?.shift === 'night') {
+    const company = await companySettings();
+    const overnight = minutesOfDay(new Date()) <= parseClockTime(company.night_end) + 120;
+    if (overnight) {
+      const yesterday = new Date(today.getTime() - 86_400_000);
+      const previous = await prisma.attendance.findUnique({
+        where: { user_id_work_date: { user_id: userId, work_date: yesterday } },
+      });
+      if (previous?.clock_in && !previous.clock_out) existing = previous;
+    }
+  }
   if (!existing?.clock_in) throw new HttpError(400, 'Clock in before clocking out');
   if (existing.clock_out) throw new HttpError(409, 'You have already clocked out today');
   const record = await prisma.attendance.update({
@@ -172,6 +233,171 @@ export async function clockOut(userId: string) {
   });
   await writeAudit(userId, 'attendance.clock_out', 'attendance', record.id);
   return record;
+}
+
+export async function submitAttendanceCorrection(
+  userId: string,
+  input: {
+    work_date?: unknown;
+    status?: unknown;
+    clock_in?: unknown;
+    clock_out?: unknown;
+    reason?: unknown;
+  },
+) {
+  if (typeof input.work_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.work_date)) {
+    throw new HttpError(400, 'The date to correct is required');
+  }
+  if (
+    input.status !== AttendanceStatus.present &&
+    input.status !== AttendanceStatus.late &&
+    input.status !== AttendanceStatus.half_day &&
+    input.status !== AttendanceStatus.absent
+  ) {
+    throw new HttpError(400, 'Status must be present, late, half_day, or absent');
+  }
+  if (
+    typeof input.reason !== 'string' ||
+    input.reason.trim().length < 3 ||
+    input.reason.trim().length > 2000
+  ) {
+    throw new HttpError(400, 'A reason between 3 and 2000 characters is required');
+  }
+  const workDate = utcDate(new Date(`${input.work_date}T00:00:00.000Z`));
+  const today = utcDate();
+  if (workDate > today) throw new HttpError(400, 'You cannot correct a future day');
+  const earliest = new Date(today.getTime() - 60 * 86_400_000);
+  if (workDate < earliest) throw new HttpError(400, 'You can only correct the last 60 days');
+  const person = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { shift: true },
+  });
+  const clockIn = clockOnDate(input.work_date, input.clock_in);
+  let clockOut = clockOnDate(input.work_date, input.clock_out);
+  if (clockIn && clockOut && clockOut.getTime() <= clockIn.getTime()) {
+    if (person?.shift === 'night') {
+      clockOut = new Date(clockOut.getTime() + 86_400_000);
+    } else {
+      throw new HttpError(400, 'Clock out cannot be before clock in');
+    }
+  }
+  const existing = await prisma.attendanceCorrection.findFirst({
+    where: { user_id: userId, work_date: workDate, status: MedicalRequestStatus.pending },
+  });
+  if (existing) throw new HttpError(409, 'A correction for this date is already waiting for HR');
+  const request = await prisma.attendanceCorrection.create({
+    data: {
+      user_id: userId,
+      work_date: workDate,
+      requested_status: input.status,
+      clock_in: clockIn,
+      clock_out: clockOut,
+      reason: input.reason.trim(),
+    },
+    include: {
+      requester: { select: { id: true, full_name: true, email: true } },
+    },
+  });
+  await writeAudit(userId, 'attendance.correction.submit', 'attendance_correction', request.id);
+  await notifyAttendanceSubmitted({
+    actorId: userId,
+    requesterName: request.requester.full_name,
+    workDate: input.work_date,
+    status: input.status,
+    reason: request.reason,
+  });
+  return request;
+}
+
+function clockOnDate(day: string, value: unknown): Date | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !/^\d{2}:\d{2}$/.test(value)) {
+    throw new HttpError(400, 'Times must be HH:MM');
+  }
+  const stamp = new Date(`${day}T${value}:00`);
+  if (Number.isNaN(stamp.getTime())) throw new HttpError(400, 'Times must be HH:MM');
+  return stamp;
+}
+
+export async function listAttendanceCorrections(
+  actor: AuthUser,
+  scope: unknown,
+  filters: { status?: unknown; q?: unknown; from?: unknown; to?: unknown } = {},
+) {
+  const queue = scope === 'queue';
+  if (queue && !roleHasPermission(actor.role, Permission.AttendanceReadAll)) {
+    throw new HttpError(403, 'Forbidden');
+  }
+  return prisma.attendanceCorrection.findMany({
+    where: {
+      ...(queue ? {} : { user_id: actor.id }),
+      ...requestFilters(filters.status, filters.q, filters.from, filters.to),
+    },
+    include: {
+      requester: { select: { id: true, full_name: true, email: true } },
+      reviewer: { select: { full_name: true } },
+    },
+    orderBy: { created_at: 'desc' },
+    take: 100,
+  });
+}
+
+export async function reviewAttendanceCorrection(
+  actor: AuthUser,
+  id: string,
+  status: unknown,
+  reviewNote: unknown,
+) {
+  if (status !== MedicalRequestStatus.approved && status !== MedicalRequestStatus.rejected) {
+    throw new HttpError(400, 'Status must be approved or rejected');
+  }
+  const request = await prisma.attendanceCorrection.findUnique({ where: { id } });
+  if (!request) throw new HttpError(404, 'Attendance correction not found');
+  if (request.user_id === actor.id) throw new HttpError(403, 'You cannot review your own request');
+  if (request.status !== MedicalRequestStatus.pending) {
+    throw new HttpError(409, 'This request has already been reviewed');
+  }
+  const updated = await prisma.$transaction(async (tx) => {
+    if (status === MedicalRequestStatus.approved) {
+      await tx.attendance.upsert({
+        where: {
+          user_id_work_date: { user_id: request.user_id, work_date: request.work_date },
+        },
+        create: {
+          user_id: request.user_id,
+          work_date: request.work_date,
+          status: request.requested_status,
+          clock_in: request.clock_in,
+          clock_out: request.clock_out,
+          note: request.reason,
+        },
+        update: {
+          status: request.requested_status,
+          ...(request.clock_in ? { clock_in: request.clock_in } : {}),
+          ...(request.clock_out ? { clock_out: request.clock_out } : {}),
+          note: request.reason,
+        },
+      });
+    }
+    return tx.attendanceCorrection.update({
+      where: { id },
+      data: {
+        status,
+        review_note: rejectionNote(status, reviewNote),
+        reviewed_by: actor.id,
+        reviewed_at: new Date(),
+      },
+      include: { requester: { select: { full_name: true } } },
+    });
+  });
+  await writeAudit(actor.id, `attendance.correction.${status}`, 'attendance_correction', id);
+  await notifyAttendanceDecided({
+    userId: request.user_id,
+    workDate: request.work_date.toISOString().slice(0, 10),
+    status,
+    reviewNote: updated.review_note,
+  });
+  return updated;
 }
 
 export async function ownAttendance(userId: string, monthValue: unknown) {
@@ -192,7 +418,40 @@ export async function ownAttendance(userId: string, monthValue: unknown) {
       !context.weekends.has(date.getUTCDay()) &&
       !context.holidayKeys.has(date.toISOString().slice(0, 10)),
   ).length;
-  const absent = Math.max(0, elapsedWorking - present - late);
+  const leaves = await prisma.leaveRequest.findMany({
+    where: {
+      user_id: userId,
+      status: MedicalRequestStatus.approved,
+      start_date: { lte: end },
+      end_date: { gte: start },
+    },
+    include: { leave_type: true },
+  });
+  const worked = new Set(
+    records
+      .filter((record) => record.clock_in)
+      .map((record) => record.work_date.toISOString().slice(0, 10)),
+  );
+  const seenLeave = new Set<string>();
+  let paidLeave = 0;
+  let unpaidLeave = 0;
+  for (const leave of leaves) {
+    for (
+      let cursor = leave.start_date.getTime();
+      cursor <= leave.end_date.getTime();
+      cursor += 86_400_000
+    ) {
+      const date = new Date(cursor);
+      const key = date.toISOString().slice(0, 10);
+      if (date < start || date > end || date > today) continue;
+      if (context.weekends.has(date.getUTCDay()) || context.holidayKeys.has(key)) continue;
+      if (worked.has(key) || seenLeave.has(key)) continue;
+      seenLeave.add(key);
+      if (leave.leave_type.is_paid) paidLeave += 1;
+      else unpaidLeave += 1;
+    }
+  }
+  const absent = Math.max(0, elapsedWorking - present - late - paidLeave - unpaidLeave);
   return {
     month: `${parsed.year}-${String(parsed.month).padStart(2, '0')}`,
     summary: {
@@ -202,6 +461,8 @@ export async function ownAttendance(userId: string, monthValue: unknown) {
       generalOff: context.generalOff,
       present,
       late,
+      paidLeave,
+      unpaidLeave,
       absent,
       records: records.length,
     },
@@ -288,6 +549,7 @@ export async function deleteHoliday(actorId: string, id: string) {
 
 const benefitInclude = {
   requester: { select: { id: true, full_name: true, email: true, role: true } },
+  submitter: { select: { id: true, full_name: true, role: true } },
   reviewer: { select: { id: true, full_name: true } },
 } as const;
 
@@ -328,6 +590,7 @@ function rejectionNote(status: unknown, reviewNote: unknown): string | null {
 export async function submitBenefit(
   userId: string,
   input: { kind?: unknown; amount?: unknown; reason?: unknown; document_url?: unknown },
+  options?: { submittedBy?: string },
 ) {
   if (input.kind !== BenefitKind.medical && input.kind !== BenefitKind.opd) {
     throw new HttpError(400, 'Kind must be medical or opd');
@@ -361,26 +624,83 @@ export async function submitBenefit(
       amount,
       reason: input.reason.trim(),
       document_url: documentUrl,
+      submitted_by: options?.submittedBy ?? null,
     },
     include: benefitInclude,
   });
-  await writeAudit(userId, 'benefit.submit', 'medical_request', request.id, input.kind);
+  await writeAudit(
+    options?.submittedBy ?? userId,
+    'benefit.submit',
+    'medical_request',
+    request.id,
+    input.kind,
+  );
+  if (options?.submittedBy) {
+    const filer = await prisma.user.findUnique({
+      where: { id: options.submittedBy },
+      select: { full_name: true },
+    });
+    await notifyBenefitOnBehalf({
+      actorId: options.submittedBy,
+      filerName: filer?.full_name ?? 'Finance',
+      employeeId: userId,
+      employeeName: request.requester.full_name,
+      kind: request.kind,
+      amount: request.amount,
+      reason: request.reason,
+    });
+  } else {
+    await notifyBenefitSubmitted({
+      actorId: userId,
+      requesterName: request.requester.full_name,
+      kind: request.kind,
+      amount: request.amount,
+      reason: request.reason,
+    });
+  }
   return request;
+}
+
+export async function submitBenefitFor(
+  actor: AuthUser,
+  input: {
+    user_id?: unknown;
+    kind?: unknown;
+    amount?: unknown;
+    reason?: unknown;
+    document_url?: unknown;
+  },
+) {
+  if (!roleHasPermission(actor.role, Permission.MedicalSubmitFor)) {
+    throw new HttpError(403, 'You cannot file a claim for someone else');
+  }
+  if (typeof input.user_id !== 'string') throw new HttpError(400, 'Choose the employee');
+  const owner = await prisma.user.findUnique({ where: { id: input.user_id } });
+  if (!owner) throw new HttpError(404, 'Employee not found');
+  if (owner.id === actor.id) throw new HttpError(400, 'File your own claim from Requests');
+  if (owner.role !== Role.employee && owner.role !== Role.dataview) {
+    throw new HttpError(403, 'Claims can be filed for employees and data view accounts');
+  }
+  return submitBenefit(owner.id, input, { submittedBy: actor.id });
 }
 
 export async function listBenefits(
   actor: AuthUser,
   scope: unknown,
   kind: unknown,
-  filters: { status?: unknown; q?: unknown; from?: unknown; to?: unknown } = {},
+  filters: { status?: unknown; q?: unknown; from?: unknown; to?: unknown; behalf?: unknown } = {},
 ) {
   const queue = scope === 'queue';
-  if (queue && !roleHasPermission(actor.role, Permission.MedicalReview)) {
-    throw new HttpError(403, 'Forbidden');
+  const behalf = filters.behalf === '1' || filters.behalf === 'true';
+  if (queue) {
+    const canSelf = roleHasPermission(actor.role, Permission.MedicalReview);
+    const canBehalf = roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf);
+    if (behalf && !canBehalf) throw new HttpError(403, 'Forbidden');
+    if (!behalf && !canSelf) throw new HttpError(403, 'Forbidden');
   }
   return prisma.medicalRequest.findMany({
     where: {
-      ...(queue ? {} : { user_id: actor.id }),
+      ...(queue ? { submitted_by: behalf ? { not: null } : null } : { user_id: actor.id }),
       ...(kind === BenefitKind.medical || kind === BenefitKind.opd ? { kind } : {}),
       ...requestFilters(filters.status, filters.q, filters.from, filters.to),
     },
@@ -402,6 +722,13 @@ export async function reviewBenefit(
   const request = await prisma.medicalRequest.findUnique({ where: { id } });
   if (!request) throw new HttpError(404, 'Request not found');
   if (request.user_id === actor.id) throw new HttpError(403, 'You cannot review your own request');
+  const onBehalf = Boolean(request.submitted_by);
+  if (onBehalf && !roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf)) {
+    throw new HttpError(403, 'HR reviews claims that finance filed for a worker');
+  }
+  if (!onBehalf && !roleHasPermission(actor.role, Permission.MedicalReview)) {
+    throw new HttpError(403, 'Finance reviews claims an employee filed');
+  }
   if (request.status !== MedicalRequestStatus.pending)
     throw new HttpError(409, 'This request has already been reviewed');
   const owner = await prisma.user.findUnique({ where: { id: request.user_id } });
@@ -427,6 +754,23 @@ export async function reviewBenefit(
     include: benefitInclude,
   });
   await writeAudit(actor.id, `benefit.${status}`, 'medical_request', id);
+  await notifyBenefitDecided({
+    userId: updated.user_id,
+    kind: updated.kind,
+    amount: updated.amount,
+    status,
+    reviewNote: updated.review_note,
+  });
+  if (request.submitted_by && request.submitted_by !== updated.user_id) {
+    await notifyBenefitFiler({
+      userId: request.submitted_by,
+      employeeName: updated.requester.full_name,
+      kind: updated.kind,
+      amount: updated.amount,
+      status: status === MedicalRequestStatus.approved ? 'approved' : 'rejected',
+      reviewNote: updated.review_note,
+    });
+  }
   return updated;
 }
 
@@ -518,11 +862,16 @@ export async function submitLeave(
   );
   if (days <= 0) throw new HttpError(400, 'The selected dates contain no working days');
   await ensureLeaveBalances(userId);
-  const balance = await prisma.leaveBalance.findUnique({
-    where: { user_id_leave_type_id: { user_id: userId, leave_type_id: input.leave_type_id } },
-  });
-  if (!balance) throw new HttpError(404, 'Leave type not found');
-  if (balance.allocated - balance.used < days) throw new HttpError(409, 'Not enough leave balance');
+  const leaveType = await prisma.leaveType.findUnique({ where: { id: input.leave_type_id } });
+  if (!leaveType?.is_active) throw new HttpError(404, 'Leave type not found');
+  if (leaveType.is_paid) {
+    const balance = await prisma.leaveBalance.findUnique({
+      where: { user_id_leave_type_id: { user_id: userId, leave_type_id: input.leave_type_id } },
+    });
+    if (!balance) throw new HttpError(404, 'Leave type not found');
+    if (balance.allocated - balance.used < days)
+      throw new HttpError(409, 'Not enough leave balance');
+  }
   const request = await prisma.leaveRequest.create({
     data: {
       user_id: userId,
@@ -538,6 +887,13 @@ export async function submitLeave(
     },
   });
   await writeAudit(userId, 'leave.submit', 'leave_request', request.id);
+  await notifyLeaveSubmitted({
+    actorId: userId,
+    requesterName: request.requester.full_name,
+    leaveName: request.leave_type.name,
+    days: request.days,
+    reason: request.reason,
+  });
   return request;
 }
 
@@ -580,18 +936,24 @@ export async function reviewLeave(
     throw new HttpError(409, 'This request has already been reviewed');
   const updated = await prisma.$transaction(async (tx) => {
     if (status === MedicalRequestStatus.approved) {
-      const balance = await tx.leaveBalance.findUnique({
-        where: {
-          user_id_leave_type_id: { user_id: request.user_id, leave_type_id: request.leave_type_id },
-        },
-      });
-      if (!balance || balance.allocated - balance.used < request.days) {
-        throw new HttpError(409, 'Not enough leave balance');
+      const leaveType = await tx.leaveType.findUnique({ where: { id: request.leave_type_id } });
+      if (leaveType?.is_paid) {
+        const balance = await tx.leaveBalance.findUnique({
+          where: {
+            user_id_leave_type_id: {
+              user_id: request.user_id,
+              leave_type_id: request.leave_type_id,
+            },
+          },
+        });
+        if (!balance || balance.allocated - balance.used < request.days) {
+          throw new HttpError(409, 'Not enough leave balance');
+        }
+        await tx.leaveBalance.update({
+          where: { id: balance.id },
+          data: { used: { increment: request.days } },
+        });
       }
-      await tx.leaveBalance.update({
-        where: { id: balance.id },
-        data: { used: { increment: request.days } },
-      });
     }
     return tx.leaveRequest.update({
       where: { id },
@@ -605,6 +967,127 @@ export async function reviewLeave(
     });
   });
   await writeAudit(actor.id, `leave.${status}`, 'leave_request', id);
+  await notifyLeaveDecided({
+    userId: updated.user_id,
+    leaveName: updated.leave_type.name,
+    days: updated.days,
+    status,
+    reviewNote: updated.review_note,
+  });
+  return updated;
+}
+
+const overtimeInclude = {
+  requester: { select: { id: true, full_name: true, email: true } },
+  reviewer: { select: { full_name: true } },
+} as const;
+
+export async function submitOvertime(
+  userId: string,
+  input: { work_date?: unknown; hours?: unknown; reason?: unknown },
+) {
+  if (typeof input.work_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.work_date)) {
+    throw new HttpError(400, 'Overtime date is required');
+  }
+  const hours = Number(input.hours);
+  if (!Number.isFinite(hours) || hours < 0.5 || hours > 12) {
+    throw new HttpError(400, 'Overtime hours must be between 0.5 and 12');
+  }
+  if (
+    typeof input.reason !== 'string' ||
+    input.reason.trim().length < 3 ||
+    input.reason.trim().length > 2000
+  ) {
+    throw new HttpError(400, 'A reason between 3 and 2000 characters is required');
+  }
+  const workDate = utcDate(new Date(`${input.work_date}T00:00:00.000Z`));
+  const today = utcDate();
+  const earliest = new Date(today.getTime() - 90 * 86_400_000);
+  const latest = new Date(today.getTime() + 14 * 86_400_000);
+  if (workDate < earliest || workDate > latest) {
+    throw new HttpError(400, 'Overtime date must be within the last 90 days or the next 14 days');
+  }
+  const existing = await prisma.overtimeRequest.findFirst({
+    where: {
+      user_id: userId,
+      work_date: workDate,
+      status: { in: [MedicalRequestStatus.pending, MedicalRequestStatus.approved] },
+    },
+  });
+  if (existing) throw new HttpError(409, 'Overtime for this date is already requested');
+  const request = await prisma.overtimeRequest.create({
+    data: {
+      user_id: userId,
+      work_date: workDate,
+      hours: Math.round(hours * 100) / 100,
+      reason: input.reason.trim(),
+    },
+    include: overtimeInclude,
+  });
+  await writeAudit(userId, 'overtime.submit', 'overtime_request', request.id);
+  await notifyOvertimeSubmitted({
+    actorId: userId,
+    requesterName: request.requester.full_name,
+    hours: request.hours,
+    workDate: input.work_date,
+    reason: request.reason,
+  });
+  return request;
+}
+
+export async function listOvertime(
+  actor: AuthUser,
+  scope: unknown,
+  filters: { status?: unknown; q?: unknown; from?: unknown; to?: unknown } = {},
+) {
+  const queue = scope === 'queue';
+  if (queue && !roleHasPermission(actor.role, Permission.OvertimeReview)) {
+    throw new HttpError(403, 'Forbidden');
+  }
+  return prisma.overtimeRequest.findMany({
+    where: {
+      ...(queue ? {} : { user_id: actor.id }),
+      ...requestFilters(filters.status, filters.q, filters.from, filters.to),
+    },
+    include: overtimeInclude,
+    orderBy: { created_at: 'desc' },
+    take: 100,
+  });
+}
+
+export async function reviewOvertime(
+  actor: AuthUser,
+  id: string,
+  status: unknown,
+  reviewNote: unknown,
+) {
+  if (status !== MedicalRequestStatus.approved && status !== MedicalRequestStatus.rejected) {
+    throw new HttpError(400, 'Status must be approved or rejected');
+  }
+  const request = await prisma.overtimeRequest.findUnique({ where: { id } });
+  if (!request) throw new HttpError(404, 'Overtime request not found');
+  if (request.user_id === actor.id) throw new HttpError(403, 'You cannot review your own request');
+  if (request.status !== MedicalRequestStatus.pending) {
+    throw new HttpError(409, 'This request has already been reviewed');
+  }
+  const updated = await prisma.overtimeRequest.update({
+    where: { id },
+    data: {
+      status,
+      review_note: rejectionNote(status, reviewNote),
+      reviewed_by: actor.id,
+      reviewed_at: new Date(),
+    },
+    include: overtimeInclude,
+  });
+  await writeAudit(actor.id, `overtime.${status}`, 'overtime_request', id);
+  await notifyOvertimeDecided({
+    userId: updated.user_id,
+    hours: updated.hours,
+    workDate: updated.work_date.toISOString().slice(0, 10),
+    status,
+    reviewNote: updated.review_note,
+  });
   return updated;
 }
 
@@ -678,8 +1161,10 @@ export async function submitProfileRequest(userId: string, changes: unknown) {
   }
   const request = await prisma.profileUpdateRequest.create({
     data: { user_id: userId, changes: clean as Prisma.InputJsonValue },
+    include: { requester: { select: { full_name: true } } },
   });
   await writeAudit(userId, 'profile.request', 'profile_update_request', request.id);
+  await notifyProfileSubmitted({ actorId: userId, requesterName: request.requester.full_name });
   return request;
 }
 
@@ -750,6 +1235,11 @@ export async function reviewProfileRequest(
     });
   });
   await writeAudit(actor.id, `profile.${status}`, 'profile_update_request', id);
+  await notifyProfileDecided({
+    userId: updated.user_id,
+    status,
+    reviewNote: updated.review_note,
+  });
   return updated;
 }
 
@@ -837,9 +1327,60 @@ export async function updateEmployment(
     data[key] = parsed;
   }
   if (input.clock_enabled !== undefined) data.clock_enabled = Boolean(input.clock_enabled);
+  if (input.login_enabled !== undefined) data.login_enabled = Boolean(input.login_enabled);
+  if (input.shift === 'day' || input.shift === 'night') data.shift = input.shift;
+  if (input.employment_status === 'active' || input.employment_status === 'resigned') {
+    data.employment_status = input.employment_status;
+    if (input.employment_status === 'resigned') data.login_enabled = false;
+  }
+  if (input.left_on !== undefined) data.left_on = optionalJoinedOn(input.left_on);
+  if (typeof input.employee_code === 'string') {
+    const code = input.employee_code.trim().toUpperCase();
+    data.employee_code = code || null;
+  }
+  const enablingLogin = input.login_enabled === true && target.login_enabled === false;
+  if (enablingLogin && (typeof input.password !== 'string' || !input.password)) {
+    throw new HttpError(400, 'Set a password before turning sign-in on');
+  }
+  if (typeof input.password === 'string' && input.password) {
+    assertPassword(input.password);
+    data.password_hash = await hashPassword(input.password);
+    data.password_changed_at = new Date();
+  }
+  const salaryTouched = (['salary_basic', 'salary_allowance', 'salary_deduction'] as const).some(
+    (key) => data[key] !== undefined && data[key] !== target[key],
+  );
   if (input.is_active !== undefined) data.is_active = Boolean(input.is_active);
-  const user = await prisma.user.update({ where: { id: userId }, data, select: publicUserSelect });
-  if (input.is_active === false) {
+  const user = await prisma.user
+    .update({ where: { id: userId }, data, select: publicUserSelect })
+    .catch((err: unknown) => {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        const targetFields = err.meta?.target;
+        const fields = Array.isArray(targetFields)
+          ? targetFields.join(' ')
+          : String(targetFields ?? '');
+        if (fields.includes('employee_code')) {
+          throw new HttpError(409, 'That employee code is already in use');
+        }
+        if (fields.includes('id_card')) {
+          throw new HttpError(409, 'An account with that ID card number already exists');
+        }
+        throw new HttpError(409, 'An account with that email already exists');
+      }
+      throw err;
+    });
+  if (salaryTouched) {
+    await prisma.salaryChange.create({
+      data: {
+        user_id: userId,
+        salary_basic: user.salary_basic,
+        salary_allowance: user.salary_allowance,
+        salary_deduction: user.salary_deduction,
+        actor_id: actor.id,
+      },
+    });
+  }
+  if (input.is_active === false || data.login_enabled === false) {
     await prisma.refreshToken.updateMany({
       where: { user_id: userId, revoked_at: null },
       data: { revoked_at: new Date() },
@@ -928,28 +1469,48 @@ export async function dashboardFor(actor: AuthUser) {
     recentMedical,
     recentLeave,
   };
-  if (actor.role !== Role.hr) return { ...base, personal };
-  const today = utcDate();
-  const [employees, inactive, clockedIn, pendingMedical, pendingLeave, pendingProfile, todayRows] =
-    await Promise.all([
-      prisma.user.count({
-        where: { role: { in: [Role.employee, Role.dataview] }, is_active: true },
+  if (actor.role === Role.finance) {
+    const [pendingMedical, pendingOpd] = await Promise.all([
+      prisma.medicalRequest.count({
+        where: { status: 'pending', submitted_by: null, kind: BenefitKind.medical },
       }),
-      prisma.user.count({
-        where: { role: { in: [Role.employee, Role.dataview] }, is_active: false },
-      }),
-      prisma.attendance.count({
-        where: { work_date: today, clock_in: { not: null }, clock_out: null },
-      }),
-      prisma.medicalRequest.count({ where: { status: 'pending' } }),
-      prisma.leaveRequest.count({ where: { status: 'pending' } }),
-      prisma.profileUpdateRequest.count({ where: { status: 'pending' } }),
-      prisma.attendance.groupBy({
-        by: ['status'],
-        where: { work_date: today },
-        _count: { _all: true },
+      prisma.medicalRequest.count({
+        where: { status: 'pending', submitted_by: null, kind: BenefitKind.opd },
       }),
     ]);
+    return { ...base, personal, finance: { pendingMedical, pendingOpd } };
+  }
+  if (actor.role !== Role.hr) return { ...base, personal };
+  const today = utcDate();
+  const [
+    employees,
+    inactive,
+    clockedIn,
+    pendingMedical,
+    pendingLeave,
+    pendingProfile,
+    pendingOvertime,
+    todayRows,
+  ] = await Promise.all([
+    prisma.user.count({
+      where: { role: { in: [Role.employee, Role.dataview] }, is_active: true },
+    }),
+    prisma.user.count({
+      where: { role: { in: [Role.employee, Role.dataview] }, is_active: false },
+    }),
+    prisma.attendance.count({
+      where: { work_date: today, clock_in: { not: null }, clock_out: null },
+    }),
+    prisma.medicalRequest.count({ where: { status: 'pending', submitted_by: { not: null } } }),
+    prisma.leaveRequest.count({ where: { status: 'pending' } }),
+    prisma.profileUpdateRequest.count({ where: { status: 'pending' } }),
+    prisma.overtimeRequest.count({ where: { status: 'pending' } }),
+    prisma.attendance.groupBy({
+      by: ['status'],
+      where: { work_date: today },
+      _count: { _all: true },
+    }),
+  ]);
   const todayCount = Object.fromEntries(todayRows.map((row) => [row.status, row._count._all]));
   return {
     ...base,
@@ -965,19 +1526,42 @@ export async function dashboardFor(actor: AuthUser) {
       pendingMedical,
       pendingLeave,
       pendingProfile,
+      pendingOvertime,
     },
   };
 }
 
-export async function employmentProfile(actor: AuthUser, userId: string) {
-  const target = await prisma.user.findUnique({ where: { id: userId }, select: publicUserSelect });
+export async function assertStaffVisible(actor: AuthUser, userId: string) {
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true },
+  });
   if (!target) throw new HttpError(404, 'User not found');
   if (target.role === Role.super_admin && actor.role !== Role.super_admin) {
     throw new HttpError(403, 'You cannot view a Super Admin account');
   }
-  if (actor.role === Role.hr && target.role !== Role.employee && target.role !== Role.dataview) {
+  if (
+    (actor.role === Role.hr || actor.role === Role.finance) &&
+    target.role !== Role.employee &&
+    target.role !== Role.dataview
+  ) {
     throw new HttpError(403, 'You can only view Employee and DataView accounts');
   }
+  return target;
+}
+
+export async function employmentProfile(actor: AuthUser, userId: string) {
+  await assertStaffVisible(actor, userId);
+  if (actor.role === Role.finance) {
+    const target = await prisma.user.findUnique({
+      where: { id: userId },
+      select: financeDirectorySelect,
+    });
+    if (!target) throw new HttpError(404, 'User not found');
+    return { user: target, balances: [] };
+  }
+  const target = await prisma.user.findUnique({ where: { id: userId }, select: publicUserSelect });
+  if (!target) throw new HttpError(404, 'User not found');
   await ensureLeaveBalances(userId);
   const balances = await prisma.leaveBalance.findMany({
     where: { user_id: userId },
@@ -986,6 +1570,17 @@ export async function employmentProfile(actor: AuthUser, userId: string) {
   });
   return { user: target, balances };
 }
+
+const financeDirectorySelect = {
+  id: true,
+  full_name: true,
+  email: true,
+  role: true,
+  employee_code: true,
+  login_enabled: true,
+  department: true,
+  is_active: true,
+} as const;
 
 export async function listPeople(
   actor: AuthUser,
@@ -996,10 +1591,15 @@ export async function listPeople(
 ) {
   const pageSize = 20;
   const staff =
-    actor.role === Role.hr
+    actor.role === Role.hr || actor.role === Role.finance
       ? [Role.employee, Role.dataview]
-      : [Role.employee, Role.dataview, Role.hr];
-  if (role && actor.role === Role.hr && role !== Role.employee && role !== Role.dataview) {
+      : [Role.employee, Role.dataview, Role.hr, Role.finance];
+  if (
+    role &&
+    (actor.role === Role.hr || actor.role === Role.finance) &&
+    role !== Role.employee &&
+    role !== Role.dataview
+  ) {
     throw new HttpError(403, 'Forbidden');
   }
   const where: Prisma.UserWhereInput = {
@@ -1011,6 +1611,7 @@ export async function listPeople(
             { full_name: { contains: query, mode: 'insensitive' } },
             { email: { contains: query, mode: 'insensitive' } },
             { department: { contains: query, mode: 'insensitive' } },
+            { employee_code: { contains: query, mode: 'insensitive' } },
           ],
         }
       : {}),
@@ -1019,7 +1620,7 @@ export async function listPeople(
     prisma.user.count({ where }),
     prisma.user.findMany({
       where,
-      select: publicUserSelect,
+      select: actor.role === Role.finance ? financeDirectorySelect : publicUserSelect,
       orderBy: { full_name: 'asc' },
       skip: (page - 1) * pageSize,
       take: pageSize,

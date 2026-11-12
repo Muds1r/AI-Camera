@@ -30,6 +30,8 @@ function present(company: {
   weekend_days: string;
   work_start: string;
   work_end: string;
+  night_start: string;
+  night_end: string;
 }) {
   return {
     name: APP_NAME,
@@ -37,6 +39,8 @@ function present(company: {
     weekend_days: company.weekend_days,
     work_start: company.work_start,
     work_end: company.work_end,
+    night_start: company.night_start,
+    night_end: company.night_end,
   };
 }
 
@@ -63,10 +67,16 @@ router.patch(
     const data: {
       weekend_days?: string;
       work_start?: string;
+      work_end?: string;
+      night_start?: string;
+      night_end?: string;
       logo_url?: string | null;
     } = {};
     if (typeof req.body?.weekend_days === 'string') data.weekend_days = req.body.weekend_days;
     if (typeof req.body?.work_start === 'string') data.work_start = req.body.work_start;
+    if (typeof req.body?.work_end === 'string') data.work_end = req.body.work_end;
+    if (typeof req.body?.night_start === 'string') data.night_start = req.body.night_start;
+    if (typeof req.body?.night_end === 'string') data.night_end = req.body.night_end;
     if (req.body?.logo_url === null) data.logo_url = null;
     const company = await prisma.company.update({ where: { id: COMPANY_ID }, data });
     await writeAudit(req.auth!.id, 'company.update', 'company', COMPANY_ID, company.name);

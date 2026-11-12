@@ -2,6 +2,7 @@ import { Prisma, Role, User } from '@prisma/client';
 import { prisma } from '../prisma';
 import { HttpError } from '../http';
 import { hashPassword, verifyPassword } from './passwords';
+import { generateCompliantPassword } from './generate-password';
 import { canAssignRole, isRole } from './permissions';
 import { AuthUser } from './session';
 import {
@@ -44,6 +45,12 @@ export const publicUserSelect = {
   medical_limit: true,
   opd_limit: true,
   clock_enabled: true,
+  login_enabled: true,
+  employee_code: true,
+  employment_status: true,
+  left_on: true,
+  shift: true,
+  password_changed_at: true,
   is_active: true,
   created_at: true,
   updated_at: true,
@@ -99,11 +106,18 @@ function optionalEmail(value: unknown, label: string): string | null | undefined
   return assertEmail(text);
 }
 
+function randomCode() {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}
+
 function uniqueConflict(err: Prisma.PrismaClientKnownRequestError): HttpError {
   const target = err.meta?.target;
   const fields = Array.isArray(target) ? target.join(' ') : String(target ?? '');
   if (fields.includes('id_card')) {
     return new HttpError(409, 'An account with that ID card number already exists');
+  }
+  if (fields.includes('employee_code')) {
+    return new HttpError(409, 'That employee code is already in use');
   }
   return new HttpError(409, 'An account with that email already exists');
 }
@@ -134,9 +148,16 @@ export async function createAccount(
     medical_limit?: unknown;
     opd_limit?: unknown;
     clock_enabled?: unknown;
+    login_enabled?: unknown;
+    employee_code?: unknown;
+    shift?: unknown;
   },
 ): Promise<PublicUser> {
-  if (typeof input.email !== 'string' || typeof input.password !== 'string') {
+  if (typeof input.email !== 'string') {
+    throw new HttpError(400, 'Email is required');
+  }
+  const loginEnabled = input.login_enabled !== false;
+  if (loginEnabled && typeof input.password !== 'string') {
     throw new HttpError(400, 'Email and password are required');
   }
   if (typeof input.full_name !== 'string') throw new HttpError(400, 'Name is required');
@@ -148,7 +169,7 @@ export async function createAccount(
   }
 
   const email = assertEmail(input.email);
-  assertPassword(input.password);
+  if (loginEnabled) assertPassword(input.password as string);
   const fullName = assertPersonName(input.full_name, 'Full name');
   const phone = optionalPhone(input.phone);
   const secondaryEmail = optionalEmail(input.secondary_email, 'Secondary email') ?? null;
@@ -167,12 +188,20 @@ export async function createAccount(
   }
 
   try {
-    return await prisma.user.create({
+    const created = await prisma.user.create({
       data: {
         email,
-        password_hash: await hashPassword(input.password),
+        password_hash: await hashPassword(
+          loginEnabled ? (input.password as string) : generateCompliantPassword(),
+        ),
         full_name: fullName,
         role,
+        login_enabled: loginEnabled,
+        employee_code:
+          typeof input.employee_code === 'string' && input.employee_code.trim()
+            ? input.employee_code.trim().toUpperCase()
+            : `EMP-${randomCode()}`,
+        shift: input.shift === 'night' ? 'night' : 'day',
         phone,
         secondary_email: secondaryEmail,
         address: optionalAddress(input.address) ?? null,
@@ -198,6 +227,16 @@ export async function createAccount(
       },
       select: publicUserSelect,
     });
+    await prisma.salaryChange.create({
+      data: {
+        user_id: created.id,
+        salary_basic: created.salary_basic,
+        salary_allowance: created.salary_allowance,
+        salary_deduction: created.salary_deduction,
+        actor_id: actor.id,
+      },
+    });
+    return created;
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       throw uniqueConflict(err);
@@ -309,6 +348,7 @@ export async function updateOwnProfile(
     const matches = await verifyPassword(input.current_password, existing.password_hash);
     if (!matches) throw new HttpError(400, 'Current password is incorrect');
     data.password_hash = await hashPassword(input.new_password);
+    data.password_changed_at = new Date();
     passwordChanged = true;
   }
 
@@ -387,6 +427,12 @@ export function toPublicUser(user: User): PublicUser {
     medical_limit: user.medical_limit,
     opd_limit: user.opd_limit,
     clock_enabled: user.clock_enabled,
+    login_enabled: user.login_enabled,
+    employee_code: user.employee_code,
+    employment_status: user.employment_status,
+    left_on: user.left_on,
+    shift: user.shift,
+    password_changed_at: user.password_changed_at,
     is_active: user.is_active,
     created_at: user.created_at,
     updated_at: user.updated_at,

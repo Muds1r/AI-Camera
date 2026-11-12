@@ -1,6 +1,11 @@
 import { MedicalRequestStatus } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
+import {
+  notifyBenefitDecided,
+  notifyBenefitFiler,
+  notifyBenefitSubmitted,
+} from '../lib/notifications';
 import { roleHasPermission, Permission } from '../lib/auth/permissions';
 import { AuthUser } from '../lib/auth/session';
 
@@ -9,14 +14,18 @@ const requestInclude = {
   reviewer: { select: { id: true, full_name: true, email: true } },
 } as const;
 
-export function listMedicalRequests(actor: AuthUser, scope: unknown) {
+export function listMedicalRequests(actor: AuthUser, scope: unknown, behalf: unknown) {
   const wantsQueue = scope === 'queue';
-  if (wantsQueue && !roleHasPermission(actor.role, Permission.MedicalReview)) {
-    throw new HttpError(403, 'Forbidden');
+  const onBehalf = behalf === '1' || behalf === 'true';
+  if (wantsQueue) {
+    const canSelf = roleHasPermission(actor.role, Permission.MedicalReview);
+    const canBehalf = roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf);
+    if (onBehalf && !canBehalf) throw new HttpError(403, 'Forbidden');
+    if (!onBehalf && !canSelf) throw new HttpError(403, 'Forbidden');
   }
 
   return prisma.medicalRequest.findMany({
-    where: wantsQueue ? {} : { user_id: actor.id },
+    where: wantsQueue ? { submitted_by: onBehalf ? { not: null } : null } : { user_id: actor.id },
     include: requestInclude,
     orderBy: { created_at: 'desc' },
     take: 100,
@@ -28,10 +37,18 @@ export async function submitMedicalRequest(userId: string, reason: unknown) {
     throw new HttpError(400, 'A reason between 3 and 2000 characters is required');
   }
 
-  return prisma.medicalRequest.create({
+  const request = await prisma.medicalRequest.create({
     data: { user_id: userId, reason: reason.trim() },
     include: requestInclude,
   });
+  await notifyBenefitSubmitted({
+    actorId: userId,
+    requesterName: request.requester.full_name,
+    kind: request.kind,
+    amount: request.amount,
+    reason: request.reason,
+  });
+  return request;
 }
 
 export async function reviewMedicalRequest(
@@ -57,11 +74,18 @@ export async function reviewMedicalRequest(
   if (request.user_id === actor.id) {
     throw new HttpError(403, 'You cannot review your own medical request');
   }
+  const onBehalf = Boolean(request.submitted_by);
+  if (onBehalf && !roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf)) {
+    throw new HttpError(403, 'HR reviews claims that finance filed for a worker');
+  }
+  if (!onBehalf && !roleHasPermission(actor.role, Permission.MedicalReview)) {
+    throw new HttpError(403, 'Finance reviews claims an employee filed');
+  }
   if (request.status !== MedicalRequestStatus.pending) {
     throw new HttpError(409, 'This request has already been reviewed');
   }
 
-  return prisma.medicalRequest.update({
+  const updated = await prisma.medicalRequest.update({
     where: { id: request.id },
     data: {
       status,
@@ -71,4 +95,26 @@ export async function reviewMedicalRequest(
     },
     include: requestInclude,
   });
+  await notifyBenefitDecided({
+    userId: updated.user_id,
+    kind: updated.kind,
+    amount: updated.amount,
+    status,
+    reviewNote: updated.review_note,
+  });
+  if (request.submitted_by && request.submitted_by !== updated.user_id) {
+    const owner = await prisma.user.findUnique({
+      where: { id: updated.user_id },
+      select: { full_name: true },
+    });
+    await notifyBenefitFiler({
+      userId: request.submitted_by,
+      employeeName: owner?.full_name ?? 'Employee',
+      kind: updated.kind,
+      amount: updated.amount,
+      status: status === MedicalRequestStatus.approved ? 'approved' : 'rejected',
+      reviewNote: updated.review_note,
+    });
+  }
+  return updated;
 }

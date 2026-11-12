@@ -1,6 +1,7 @@
 'use client';
 
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   PageFrame,
   buttonClass,
@@ -13,9 +14,10 @@ import {
 } from '@/components/page-frame';
 import { EmptyState, ListRow, MetricStrip, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { DateField } from '@/components/date-field';
 import { documentFileError } from '@/lib/fields';
 
-type Tab = 'benefits' | 'leave';
+type Tab = 'benefits' | 'leave' | 'overtime';
 
 interface Benefit {
   id: string;
@@ -36,7 +38,16 @@ interface Balance {
   id: string;
   allocated: number;
   used: number;
-  leave_type: { id: string; name: string };
+  leave_type: { id: string; name: string; is_paid: boolean };
+}
+
+interface OvertimeItem {
+  id: string;
+  hours: number;
+  reason: string;
+  status: string;
+  work_date: string;
+  review_note: string | null;
 }
 
 interface LeaveItem {
@@ -51,12 +62,27 @@ interface LeaveItem {
 }
 
 export default function RequestsPage() {
-  const [tab, setTab] = useState<Tab>('benefits');
+  return (
+    <Suspense fallback={<PageFrame title="Requests">{null}</PageFrame>}>
+      <RequestsPageContent />
+    </Suspense>
+  );
+}
+
+function RequestsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabQuery = searchParams.get('tab');
+  const kindQuery = searchParams.get('kind');
+  const tab: Tab = tabQuery === 'leave' || tabQuery === 'overtime' ? tabQuery : 'benefits';
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [allowance, setAllowance] = useState<Allowance | null>(null);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [leaves, setLeaves] = useState<LeaveItem[]>([]);
-  const [kind, setKind] = useState<'medical' | 'opd'>('medical');
+  const [overtime, setOvertime] = useState<OvertimeItem[]>([]);
+  const [otDate, setOtDate] = useState('');
+  const [otHours, setOtHours] = useState('');
+  const kind = kindQuery === 'opd' ? 'opd' : 'medical';
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
@@ -72,18 +98,27 @@ export default function RequestsPage() {
       apiJson<Allowance>('/api/benefits/balances'),
       apiJson<{ balances: Balance[] }>('/api/leave/balances'),
       apiJson<{ requests: LeaveItem[] }>('/api/leave'),
-    ]).then(([claims, remaining, leaveBalances, leaveRequests]) => {
+      apiJson<{ requests: OvertimeItem[] }>('/api/overtime'),
+    ]).then(([claims, remaining, leaveBalances, leaveRequests, overtimeRequests]) => {
       setBenefits(claims.requests);
       setAllowance(remaining);
       setBalances(leaveBalances.balances);
       setTypeId((current) => current || leaveBalances.balances[0]?.leave_type.id || '');
       setLeaves(leaveRequests.requests);
+      setOvertime(overtimeRequests.requests);
     });
   }
 
   useEffect(() => {
     load().catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load'));
   }, []);
+
+  function replaceQuery(next: { tab?: Tab; kind?: 'medical' | 'opd' }) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next.tab) params.set('tab', next.tab);
+    if (next.kind) params.set('kind', next.kind);
+    router.replace(`/requests?${params.toString()}`);
+  }
 
   async function submitClaim(event: FormEvent) {
     event.preventDefault();
@@ -136,12 +171,30 @@ export default function RequestsPage() {
     }
   }
 
+  async function submitOvertime(event: FormEvent) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    try {
+      await apiJson('/api/overtime', {
+        method: 'POST',
+        body: JSON.stringify({ work_date: otDate, hours: Number(otHours), reason }),
+      });
+      setReason('');
+      setOtHours('');
+      setMessage('Overtime request submitted.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not submit');
+    }
+  }
+
   const visible = benefits.filter((item) => item.kind === kind);
 
   return (
     <PageFrame
       title="Requests"
-      description="Medical, OPD, and leave requests for your own account."
+      description="Medical and OPD are reviewed by Finance. Leave, overtime, and attendance corrections are reviewed by HR."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
@@ -149,12 +202,13 @@ export default function RequestsPage() {
           [
             ['benefits', 'Medical & OPD'],
             ['leave', 'Leave'],
+            ['overtime', 'Overtime'],
           ] as const
         ).map(([id, label]) => (
           <button
             key={id}
             type="button"
-            onClick={() => setTab(id)}
+            onClick={() => replaceQuery({ tab: id })}
             className={tab === id ? tabActiveClass : tabIdleClass}
           >
             {label}
@@ -164,13 +218,15 @@ export default function RequestsPage() {
 
       {tab === 'leave' ? (
         <>
-          {balances.length > 0 ? (
+          {balances.some((item) => item.leave_type.is_paid) ? (
             <MetricStrip
-              items={balances.map((item) => ({
-                label: item.leave_type.name,
-                value: item.allocated - item.used,
-                hint: `${item.used} used of ${item.allocated}`,
-              }))}
+              items={balances
+                .filter((item) => item.leave_type.is_paid)
+                .map((item) => ({
+                  label: item.leave_type.name,
+                  value: item.allocated - item.used,
+                  hint: `${item.used} used of ${item.allocated}`,
+                }))}
             />
           ) : null}
           <form onSubmit={submitLeave} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
@@ -185,6 +241,13 @@ export default function RequestsPage() {
                 </option>
               ))}
             </select>
+            {balances.find((item) => item.leave_type.id === typeId)?.leave_type.is_paid ===
+            false ? (
+              <p className="text-mute text-sm md:col-span-2">
+                Unpaid leave has no balance. Each working day is deducted from that month&apos;s
+                pay.
+              </p>
+            ) : null}
             <DateField
               required
               placeholder="Enter leave start date"
@@ -213,6 +276,42 @@ export default function RequestsPage() {
             }))}
           />
         </>
+      ) : tab === 'overtime' ? (
+        <>
+          <form onSubmit={submitOvertime} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
+            <DateField required placeholder="Overtime date" value={otDate} onChange={setOtDate} />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0.5"
+              max="12"
+              step="0.5"
+              required
+              placeholder="Hours"
+              value={otHours}
+              onChange={(event) => setOtHours(event.target.value)}
+            />
+            <textarea
+              className={`${fieldClass} min-h-20 md:col-span-2`}
+              required
+              placeholder="Reason"
+              maxLength={2000}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+            />
+            <button className={buttonClass} type="submit">
+              Submit overtime
+            </button>
+          </form>
+          <History
+            rows={overtime.map((item) => ({
+              id: item.id,
+              title: `${item.hours} hours · ${item.work_date.slice(0, 10)}`,
+              detail: `${item.reason}${item.review_note ? ` · ${item.review_note}` : ''}`,
+              status: item.status,
+            }))}
+          />
+        </>
       ) : (
         <>
           {allowance ? (
@@ -235,7 +334,9 @@ export default function RequestsPage() {
             <select
               className={fieldClass}
               value={kind}
-              onChange={(event) => setKind(event.target.value as 'medical' | 'opd')}
+              onChange={(event) =>
+                replaceQuery({ tab: 'benefits', kind: event.target.value as 'medical' | 'opd' })
+              }
             >
               <option value="medical">Medical</option>
               <option value="opd">OPD</option>

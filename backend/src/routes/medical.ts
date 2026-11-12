@@ -20,9 +20,13 @@ router.use(requireAuth);
 
 router.get(
   '/',
-  requireAnyPermission(Permission.MedicalReadOwn, Permission.MedicalReview),
+  requireAnyPermission(
+    Permission.MedicalReadOwn,
+    Permission.MedicalReview,
+    Permission.MedicalReviewOnBehalf,
+  ),
   asyncHandler(async (req, res) => {
-    const requests = await listMedicalRequests(req.auth!, req.query.scope);
+    const requests = await listMedicalRequests(req.auth!, req.query.scope, req.query.behalf);
     res.json({ requests });
   }),
 );
@@ -38,7 +42,7 @@ router.post(
 
 router.patch(
   '/:id',
-  requirePermission(Permission.MedicalReview),
+  requireAnyPermission(Permission.MedicalReview, Permission.MedicalReviewOnBehalf),
   asyncHandler(async (req, res) => {
     const request = await reviewMedicalRequest(
       req.auth!,

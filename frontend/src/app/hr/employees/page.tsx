@@ -12,6 +12,7 @@ import {
   labelClass,
 } from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
+import { PayslipView, type Payslip } from '@/components/payslip-view';
 import {
   Notice,
   Pagination,
@@ -77,6 +78,7 @@ export default function EmployeesPage() {
   const [accountGender, setAccountGender] = useState('');
   const [accountJoined, setAccountJoined] = useState('');
   const [password, setPassword] = useState('');
+  const [giveLogin, setGiveLogin] = useState(true);
   const [newRole, setNewRole] = useState<'employee' | 'dataview'>('employee');
   const [department, setDepartment] = useState('');
   const [designation, setDesignation] = useState('');
@@ -85,6 +87,11 @@ export default function EmployeesPage() {
   const [medical, setMedical] = useState('');
   const [opd, setOpd] = useState('');
   const [selected, setSelected] = useState<SessionUser | null>(null);
+  const [payMonth, setPayMonth] = useState('');
+  const [payslip, setPayslip] = useState<Payslip | null>(null);
+  const [history, setHistory] = useState<
+    { id: string; at: string; label: string; detail: string | null }[]
+  >([]);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [phone, setPhone] = useState('');
   const [secondaryEmail, setSecondaryEmail] = useState('');
@@ -105,6 +112,11 @@ export default function EmployeesPage() {
   const [editMedical, setEditMedical] = useState('');
   const [editOpd, setEditOpd] = useState('');
   const [clockEnabled, setClockEnabled] = useState(true);
+  const [shift, setShift] = useState<'day' | 'night'>('day');
+  const [loginEnabled, setLoginEnabled] = useState(true);
+  const [employmentStatus, setEmploymentStatus] = useState<'active' | 'resigned'>('active');
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -124,6 +136,39 @@ export default function EmployeesPage() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (payMonth) return;
+    const timer = window.setTimeout(() => {
+      setPayMonth(new Date().toISOString().slice(0, 7));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [payMonth]);
+
+  useEffect(() => {
+    const employeeId = selected?.id;
+    if (!employeeId || !payMonth) return;
+    let ignore = false;
+    apiJson<{ payslip: Payslip }>(`/api/payslips/${employeeId}?month=${payMonth}`)
+      .then((data) => {
+        if (!ignore) setPayslip(data.payslip);
+      })
+      .catch(() => {
+        if (!ignore) setPayslip(null);
+      });
+    apiJson<{ activity: { id: string; at: string; label: string; detail: string | null }[] }>(
+      `/api/users/${employeeId}/activity`,
+    )
+      .then((data) => {
+        if (!ignore) setHistory(data.activity);
+      })
+      .catch(() => {
+        if (!ignore) setHistory([]);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [selected?.id, payMonth]);
 
   async function create(event: FormEvent) {
     event.preventDefault();
@@ -146,7 +191,7 @@ export default function EmployeesPage() {
       joined_on: joinedOnError(accountJoined),
       department: labelError(department, 'Department'),
       designation: labelError(designation, 'Designation'),
-      password: passwordError(password, true),
+      password: giveLogin ? passwordError(password, true) : '',
     });
     if (problem) {
       setError(problem);
@@ -164,7 +209,8 @@ export default function EmployeesPage() {
           date_of_birth: accountDob,
           gender: accountGender,
           joined_on: accountJoined,
-          password,
+          login_enabled: giveLogin,
+          ...(giveLogin ? { password } : {}),
           role: newRole,
           department,
           designation,
@@ -224,6 +270,10 @@ export default function EmployeesPage() {
     setEditMedical(formatAmount(data.user.medical_limit));
     setEditOpd(formatAmount(data.user.opd_limit));
     setClockEnabled(data.user.clock_enabled);
+    setShift(data.user.shift || 'day');
+    setLoginEnabled(data.user.login_enabled);
+    setEmploymentStatus(data.user.employment_status || 'active');
+    setEmployeeCode(data.user.employee_code || '');
   }
 
   async function savePerson(event: FormEvent) {
@@ -259,6 +309,10 @@ export default function EmployeesPage() {
       setError(problem);
       return;
     }
+    if (loginEnabled && !selected.login_enabled && !loginPassword) {
+      setError('Set a password before turning sign-in on');
+      return;
+    }
     const leave_allocations = Object.fromEntries(
       balances.map((item) => [item.leave_type.code, item.allocated]),
     );
@@ -286,6 +340,11 @@ export default function EmployeesPage() {
           medical_limit: parseAmount(editMedical),
           opd_limit: parseAmount(editOpd),
           clock_enabled: clockEnabled,
+          login_enabled: loginEnabled,
+          shift,
+          employment_status: employmentStatus,
+          employee_code: employeeCode,
+          ...(loginPassword ? { password: loginPassword } : {}),
           leave_allocations,
         }),
       });
@@ -448,12 +507,26 @@ export default function EmployeesPage() {
             <option value="employee">Employee</option>
             <option value="dataview">DataView</option>
           </select>
-          <PasswordField
-            required
-            value={password}
-            onChange={setPassword}
-            placeholder="Password, letter and number"
-          />
+          <label className="text-ink flex items-center gap-2 text-sm md:col-span-2">
+            <input
+              type="checkbox"
+              checked={giveLogin}
+              onChange={(event) => setGiveLogin(event.target.checked)}
+            />
+            Give this person a login
+          </label>
+          {giveLogin ? (
+            <PasswordField
+              required
+              value={password}
+              onChange={setPassword}
+              placeholder="Password, letter and number"
+            />
+          ) : (
+            <p className="text-mute text-sm md:col-span-2">
+              Saved as an employee record only. You can turn sign-in on later.
+            </p>
+          )}
           <button className={buttonClass} type="submit">
             Create account
           </button>
@@ -542,7 +615,10 @@ export default function EmployeesPage() {
                         onClick={() => openPerson(person).catch(() => undefined)}
                       >
                         {person.full_name}
-                        <span className="text-mute block font-medium">{person.email}</span>
+                        <span className="text-mute block font-medium">
+                          {person.email}
+                          {person.employee_code ? ` · ${person.employee_code}` : ''}
+                        </span>
                       </button>
                     </td>
                     <td className="px-4 py-3 capitalize">{person.role}</td>
@@ -571,6 +647,38 @@ export default function EmployeesPage() {
 
       {selected ? (
         <PageSection title="Edit account" description={selected.email}>
+          <div className="mb-6 flex max-w-xs flex-col gap-2">
+            <label className={labelClass}>
+              Payslip month
+              <input
+                className={`${fieldClass} mt-1`}
+                type="month"
+                value={payMonth}
+                onChange={(event) => setPayMonth(event.target.value)}
+              />
+            </label>
+          </div>
+          {payslip ? (
+            <div className="mb-8">
+              <PayslipView slip={payslip} />
+            </div>
+          ) : null}
+          {history.length > 0 ? (
+            <div className="mb-8">
+              <h2 className="text-ink mb-2 text-sm font-semibold">Recent activity</h2>
+              <ul className="space-y-1">
+                {history.slice(0, 6).map((item) => (
+                  <li key={item.id} className="text-sm">
+                    <span className="text-ink capitalize">{item.label}</span>
+                    <span className="text-mute block text-xs">
+                      {new Date(item.at).toLocaleString()}
+                      {item.detail ? ` · ${item.detail}` : ''}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           <form onSubmit={savePerson} className={`${formPanelClass} md:grid-cols-2`}>
             <h2 className="text-ink text-sm font-medium md:col-span-2">{selected.full_name}</h2>
             <p className="text-mute text-sm md:col-span-2">{selected.email}</p>
@@ -730,6 +838,46 @@ export default function EmployeesPage() {
               />
               Clock in enabled
             </label>
+            <label className="text-ink flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={loginEnabled}
+                onChange={(event) => setLoginEnabled(event.target.checked)}
+              />
+              Can sign in
+            </label>
+            {loginEnabled ? (
+              <PasswordField
+                value={loginPassword}
+                onChange={setLoginPassword}
+                placeholder="Set a password to turn sign-in on"
+              />
+            ) : null}
+            <select
+              className={fieldClass}
+              aria-label="Shift"
+              value={shift}
+              onChange={(event) => setShift(event.target.value as 'day' | 'night')}
+            >
+              <option value="day">Day shift</option>
+              <option value="night">Night shift</option>
+            </select>
+            <select
+              className={fieldClass}
+              aria-label="Employment"
+              value={employmentStatus}
+              onChange={(event) => setEmploymentStatus(event.target.value as 'active' | 'resigned')}
+            >
+              <option value="active">Employed</option>
+              <option value="resigned">Resigned</option>
+            </select>
+            <input
+              className={fieldClass}
+              aria-label="Employee code"
+              placeholder="Employee code"
+              value={employeeCode}
+              onChange={(event) => setEmployeeCode(event.target.value.toUpperCase())}
+            />
             {balances.map((item) => (
               <label key={item.id} className={labelClass}>
                 {item.leave_type.name} allocated
