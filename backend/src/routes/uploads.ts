@@ -14,7 +14,6 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
 
 router.get(
   '/avatars/:filename',
-  requireAuth,
   asyncHandler(async (req, res) => {
     sendAvatar(routeParam(req.params.filename), res);
   }),

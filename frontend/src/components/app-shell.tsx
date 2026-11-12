@@ -9,6 +9,8 @@ import { redirectToLogin } from '@/lib/auth/redirect';
 import { APP_NAME } from '@/lib/brand';
 import { ROLE_LABELS, type Role } from '@/lib/auth/permissions';
 import type { SessionUser } from '@/lib/auth/types';
+import { Breadcrumb, pageCrumbs } from '@/components/breadcrumbs';
+import { NotificationBell } from '@/components/notification-bell';
 import { ThemeToggle } from '@/components/theme-toggle';
 
 const BASE_NAV: Record<Role, { href: string; label: string }[]> = {
@@ -23,12 +25,14 @@ const BASE_NAV: Record<Role, { href: string; label: string }[]> = {
     { href: '/hr/employees', label: 'Employees' },
     { href: '/hr/attendance', label: 'Attendance' },
     { href: '/hr/requests', label: 'Approvals' },
+    { href: '/hr/announcements', label: 'Announcements' },
     { href: '/hr/company', label: 'Company' },
   ],
   super_admin: [
     { href: '/', label: 'Dashboard' },
     { href: '/admin/hr', label: 'HR Accounts' },
     { href: '/admin/logs', label: 'Activity' },
+    { href: '/finance/claims', label: 'Claims' },
     { href: '/cameras', label: 'Cameras' },
     { href: '/operations', label: 'Operations' },
   ],
@@ -37,6 +41,10 @@ const BASE_NAV: Record<Role, { href: string; label: string }[]> = {
     { href: '/attendance', label: 'Attendance' },
     { href: '/cameras', label: 'Cameras' },
     { href: '/operations', label: 'Operations' },
+  ],
+  finance: [
+    { href: '/', label: 'Dashboard' },
+    { href: '/finance/claims', label: 'Claims' },
   ],
 };
 
@@ -49,10 +57,11 @@ function initials(name: string) {
     .join('');
 }
 
-const WORKSPACE_LABEL: Partial<Record<Role, string>> = {
-  hr: 'HR workspace',
+const WORKSPACE_CRUMB: Partial<Record<Role, string>> = {
+  hr: 'HR',
   employee: 'Employee',
   dataview: 'DataView',
+  finance: 'Finance',
   super_admin: 'Administration',
 };
 
@@ -117,8 +126,9 @@ export function AppShell({
     router.refresh();
   }
 
-  const links = user ? BASE_NAV[user.role] : [];
-  const workspace = workspaceLabel ?? (user ? WORKSPACE_LABEL[user.role] : undefined);
+  const links = user ? [...BASE_NAV[user.role], { href: '/policies', label: 'Policies' }] : [];
+  const workspace = workspaceLabel ?? (user ? WORKSPACE_CRUMB[user.role] : undefined);
+  const crumbs = pageCrumbs(pathname, title, user ? WORKSPACE_CRUMB[user.role] : undefined);
 
   return (
     <div className="text-ink flex min-h-screen">
@@ -194,13 +204,12 @@ export function AppShell({
             )}
             <div className="min-w-0">
               <h1 className="text-display truncate text-lg font-bold">{title}</h1>
-              {workspace ? (
-                <p className="text-mute text-caption hidden text-xs sm:block">{workspace}</p>
-              ) : null}
+              {crumbs.length > 0 ? <Breadcrumb crumbs={crumbs} /> : null}
             </div>
           </div>
           <div className="flex items-center gap-2.5">
             {actions}
+            {user ? <NotificationBell /> : null}
             <ThemeToggle />
             {user ? (
               <div className="relative" ref={menuRef}>

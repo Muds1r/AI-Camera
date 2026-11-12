@@ -11,6 +11,9 @@ import medicalRoutes from './routes/medical';
 import uploadRoutes from './routes/uploads';
 import companyRoutes from './routes/company';
 import workforceRoutes from './routes/workforce';
+import notificationRoutes from './routes/notifications';
+import policyRoutes from './routes/policies';
+import announcementRoutes from './routes/announcements';
 import { errorHandler } from './middleware/error';
 import { assertAuthConfig } from './lib/auth/tokens';
 
@@ -33,9 +36,12 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/company', companyRoutes);
-app.use('/api', workforceRoutes);
-app.use('/api/users', userRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/policies', policyRoutes);
+app.use('/api/announcements', announcementRoutes);
+app.use('/api', workforceRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/medical-requests', medicalRoutes);
 app.use('/api/cameras', cameraRoutes);

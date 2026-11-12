@@ -1,6 +1,10 @@
 import bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
-import { hashRefreshToken } from '../lib/auth/tokens';
+import {
+  REMEMBER_REFRESH_TTL_SECONDS,
+  SESSION_REFRESH_TTL_SECONDS,
+  hashRefreshToken,
+} from '../lib/auth/tokens';
 import { login, refreshSession } from './auth.service';
 
 interface FakeUser {
@@ -25,6 +29,7 @@ interface FakeToken {
   token_hash: string;
   family_id: string;
   expires_at: Date;
+  remember_me: boolean;
   revoked_at: Date | null;
   replaced_by: string | null;
   created_at: Date;
@@ -58,6 +63,7 @@ jest.mock('../lib/prisma', () => {
       }) => Promise<{ count: number }>;
     };
     $transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+    loginEvent: { create: (args: { data: unknown }) => Promise<unknown> };
   } = {
     user: {
       findUnique: async ({ where }: { where: { email?: string; id?: string } }) =>
@@ -73,6 +79,7 @@ jest.mock('../lib/prisma', () => {
           token_hash: data.token_hash!,
           family_id: data.family_id!,
           expires_at: data.expires_at!,
+          remember_me: data.remember_me ?? false,
           revoked_at: data.revoked_at ?? null,
           replaced_by: data.replaced_by ?? null,
           created_at: new Date(),
@@ -117,6 +124,9 @@ jest.mock('../lib/prisma', () => {
       },
     },
     $transaction: async (fn) => fn(prisma),
+    loginEvent: {
+      create: async () => ({ id: 'login-event' }),
+    },
   };
 
   return { prisma };
@@ -209,5 +219,58 @@ describe('refresh token rotation', () => {
 
     const next = await refreshSession(rotated.refreshToken);
     expect(next.ok).toBe(true);
+  });
+
+  it('issues a short session without remember me and preserves that on refresh', async () => {
+    await addUser();
+    const first = await login('ada@example.com', 'correct-password', false);
+    if (!first.ok) throw new Error('login failed');
+    expect(first.rememberMe).toBe(false);
+
+    const stored = state().tokens.find(
+      (token) => token.token_hash === hashRefreshToken(first.refreshToken),
+    );
+    expect(stored?.remember_me).toBe(false);
+    const sessionSkewMs = 5_000;
+    expect(stored!.expires_at.getTime()).toBeLessThanOrEqual(
+      Date.now() + SESSION_REFRESH_TTL_SECONDS * 1000 + sessionSkewMs,
+    );
+
+    const rotated = await refreshSession(first.refreshToken);
+    if (!rotated.ok) throw new Error('refresh failed');
+    expect(rotated.rememberMe).toBe(false);
+    const next = state().tokens.find(
+      (token) => token.token_hash === hashRefreshToken(rotated.refreshToken),
+    );
+    expect(next?.remember_me).toBe(false);
+  });
+
+  it('issues a long-lived remember-me session and keeps the flag across rotation', async () => {
+    await addUser();
+    const first = await login('ada@example.com', 'correct-password', true);
+    if (!first.ok) throw new Error('login failed');
+    expect(first.rememberMe).toBe(true);
+
+    const stored = state().tokens.find(
+      (token) => token.token_hash === hashRefreshToken(first.refreshToken),
+    );
+    expect(stored?.remember_me).toBe(true);
+    expect(stored!.expires_at.getTime()).toBeGreaterThan(
+      Date.now() + SESSION_REFRESH_TTL_SECONDS * 1000,
+    );
+    expect(stored!.expires_at.getTime()).toBeLessThanOrEqual(
+      Date.now() + REMEMBER_REFRESH_TTL_SECONDS * 1000 + 5_000,
+    );
+
+    const rotated = await refreshSession(first.refreshToken);
+    if (!rotated.ok) throw new Error('refresh failed');
+    expect(rotated.rememberMe).toBe(true);
+  });
+
+  it('treats invalid rememberMe values as false', async () => {
+    await addUser();
+    const first = await login('ada@example.com', 'correct-password', 'nope');
+    if (!first.ok) throw new Error('login failed');
+    expect(first.rememberMe).toBe(false);
   });
 });

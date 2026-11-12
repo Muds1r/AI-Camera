@@ -5,12 +5,14 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/refresh',
   '/api/auth/logout',
+  '/api/auth/forgot-password',
   '/api/company/branding',
 ]);
 
 const ROLE_PREFIXES: { prefix: string; roles: readonly Role[] }[] = [
   { prefix: '/admin', roles: ['super_admin'] },
   { prefix: '/hr', roles: ['hr', 'super_admin'] },
+  { prefix: '/finance', roles: ['finance', 'super_admin'] },
   { prefix: '/cameras', roles: ['dataview', 'super_admin'] },
   { prefix: '/operations', roles: ['dataview', 'super_admin'] },
   { prefix: '/requests', roles: ['employee', 'hr', 'super_admin'] },
@@ -31,6 +33,7 @@ export type AccessDecision = 'allow' | 'login' | 'deny';
  */
 export function canAccessPath(pathname: string, role: Role | null): AccessDecision {
   if (PUBLIC_PATHS.has(pathname)) return 'allow';
+  if (pathname.startsWith('/api/uploads/avatars/')) return 'allow';
   if (pathname.startsWith('/api/')) return role ? 'allow' : 'login';
   if (!role || !isRole(role)) return 'login';
 

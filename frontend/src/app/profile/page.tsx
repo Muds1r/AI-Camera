@@ -78,6 +78,12 @@ function Field({
 export default function ProfilePage() {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [requests, setRequests] = useState<ProfileRequest[]>([]);
+  const [activity, setActivity] = useState<
+    { id: string; at: string; label: string; detail: string | null }[]
+  >([]);
+  const [sessions, setSessions] = useState<
+    { id: string; created_at: string; remember_me: boolean; current: boolean }[]
+  >([]);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [secondaryEmail, setSecondaryEmail] = useState('');
@@ -125,9 +131,17 @@ export default function ProfilePage() {
     return Promise.all([
       apiJson<{ user: SessionUser }>('/api/auth/me'),
       apiJson<{ requests: ProfileRequest[] }>('/api/profile-requests'),
-    ]).then(([session, list]) => {
+      apiJson<{ activity: { id: string; at: string; label: string; detail: string | null }[] }>(
+        '/api/auth/activity',
+      ),
+      apiJson<{
+        sessions: { id: string; created_at: string; remember_me: boolean; current: boolean }[];
+      }>('/api/auth/sessions'),
+    ]).then(([session, list, history, devices]) => {
       applyUser(session.user);
       setRequests(list.requests);
+      setActivity(history.activity);
+      setSessions(devices.sessions);
     });
   }
 
@@ -205,7 +219,7 @@ export default function ProfilePage() {
           method: 'POST',
           body: JSON.stringify({ changes }),
         });
-        setMessage('Profile update sent to HR.');
+        setMessage('Profile update sent to HR for approval.');
       }
       setPicture(null);
       await load();
@@ -247,6 +261,47 @@ export default function ProfilePage() {
   return (
     <PageFrame title="Profile">
       <Notice error={error} message={message} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Signed-in devices">
+          <ul className="space-y-2">
+            {sessions.map((item) => (
+              <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
+                <span>
+                  {new Date(item.created_at).toLocaleString()}
+                  {item.current ? ' · this device' : ''}
+                  {item.remember_me ? ' · remembered' : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            className={`${buttonSecondaryClass} mt-3`}
+            onClick={() =>
+              apiJson('/api/auth/sessions/others', { method: 'POST' }).then(() => load())
+            }
+          >
+            Sign out other devices
+          </button>
+        </Card>
+        <Card title="Recent activity">
+          {activity.length === 0 ? (
+            <p className="text-mute text-sm">No activity yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {activity.slice(0, 8).map((item) => (
+                <li key={item.id} className="text-sm">
+                  <span className="text-ink font-medium capitalize">{item.label}</span>
+                  <span className="text-mute block text-xs">
+                    {new Date(item.at).toLocaleString()}
+                    {item.detail ? ` · ${item.detail}` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
       <div className="grid items-start gap-6 xl:grid-cols-[17.5rem_minmax(0,1fr)]">
         <aside className={`${cardClass} overflow-hidden`}>
           <div className="p-6">

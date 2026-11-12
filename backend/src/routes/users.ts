@@ -6,8 +6,9 @@ import { HttpError, routeParam } from '../lib/http';
 import { requireAnyPermission, requireAuth, requirePermission } from '../middleware/auth';
 import { assignRole, createAccount, publicUserSelect, updateOwnProfile } from '../lib/auth/users';
 import { prisma } from '../lib/prisma';
-import { replaceSessionAfterPasswordChange } from '../services/auth.service';
+import { personActivity, replaceSessionAfterPasswordChange } from '../services/auth.service';
 import {
+  assertStaffVisible,
   employmentProfile,
   ensureLeaveBalances,
   listPeople,
@@ -53,7 +54,7 @@ router.patch(
     if (passwordChanged) {
       const session = await replaceSessionAfterPasswordChange(req.auth!.id);
       if (!session.ok) throw new HttpError(401, 'Unauthorized');
-      setAuthCookies(res, session.accessToken, session.refreshToken);
+      setAuthCookies(res, session.accessToken, session.refreshToken, session.rememberMe);
       res.json({
         user: session.user,
         accessToken: session.accessToken,
@@ -112,6 +113,18 @@ router.get(
     const active =
       req.query.active === 'true' ? true : req.query.active === 'false' ? false : undefined;
     res.json(await listPeople(req.auth!, requested, q, page, active));
+  }),
+);
+
+router.get(
+  '/:id/activity',
+  requirePermission(Permission.UsersRead),
+  asyncHandler(async (req, res) => {
+    if (req.auth!.role === Role.finance) {
+      throw new HttpError(403, 'Forbidden');
+    }
+    await assertStaffVisible(req.auth!, routeParam(req.params.id));
+    res.json({ activity: await personActivity(routeParam(req.params.id)) });
   }),
 );
 

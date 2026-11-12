@@ -72,7 +72,7 @@ export default function TeamAttendancePage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [clockedIn, setClockedIn] = useState(0);
   const [query, setQuery] = useState('');
-  const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [month, setMonth] = useState('');
   const [status, setStatus] = useState('');
   const [range, setRange] = useState<'month' | 'week' | 'today'>('month');
   const [mine, setMine] = useState<Mine | null>(null);
@@ -93,11 +93,16 @@ export default function TeamAttendancePage() {
   }
 
   useEffect(() => {
+    const current = new Date().toISOString().slice(0, 7);
+    const timer = window.setTimeout(() => {
+      setMonth((value) => value || current);
+    }, 0);
     Promise.all([
-      loadTeam(''),
+      loadTeam('', current),
       apiJson<Mine>('/api/attendance/me').then(setMine),
       apiJson<{ holidays: Holiday[] }>('/api/holidays').then((data) => setHolidays(data.holidays)),
     ]).catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load'));
+    return () => window.clearTimeout(timer);
     // Initial load only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -299,7 +304,7 @@ export default function TeamAttendancePage() {
             <input
               className={fieldClass}
               required
-              placeholder="Name"
+              placeholder="Enter holiday name"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />

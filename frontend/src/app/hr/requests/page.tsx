@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   PageFrame,
   buttonDangerClass,
@@ -15,7 +16,21 @@ import {
 import { Badge, ConfirmDialog, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
-type Tab = 'medical' | 'opd' | 'leave' | 'profile';
+type Tab = 'medical' | 'opd' | 'leave' | 'profile' | 'overtime' | 'attendance';
+
+function parseTab(value: string | null): Tab {
+  if (
+    value === 'opd' ||
+    value === 'leave' ||
+    value === 'profile' ||
+    value === 'medical' ||
+    value === 'overtime' ||
+    value === 'attendance'
+  ) {
+    return value;
+  }
+  return 'leave';
+}
 
 interface Row {
   id: string;
@@ -56,17 +71,29 @@ function profileChangeDetail(changes: Record<string, string | null>) {
 }
 
 const TABS: { id: Tab; label: string }[] = [
-  { id: 'medical', label: 'Medical' },
-  { id: 'opd', label: 'OPD' },
   { id: 'leave', label: 'Leave' },
+  { id: 'overtime', label: 'Overtime' },
+  { id: 'attendance', label: 'Attendance' },
   { id: 'profile', label: 'Profile updates' },
+  { id: 'medical', label: 'Filed medical' },
+  { id: 'opd', label: 'Filed OPD' },
 ];
 
 export default function ApprovalsPage() {
-  const [tab, setTab] = useState<Tab>('medical');
+  return (
+    <Suspense fallback={<PageFrame title="Requests & Approvals">{null}</PageFrame>}>
+      <ApprovalsPageContent />
+    </Suspense>
+  );
+}
+
+function ApprovalsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = parseTab(searchParams.get('tab'));
   const [rows, setRows] = useState<Row[]>([]);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('pending');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [error, setError] = useState('');
@@ -84,6 +111,7 @@ export default function ApprovalsPage() {
     if (filters.to) params.set('to', filters.to);
     if (next === 'medical' || next === 'opd') {
       params.set('kind', next);
+      params.set('behalf', '1');
       return apiJson<{
         requests: {
           id: string;
@@ -94,13 +122,14 @@ export default function ApprovalsPage() {
           document_url: string | null;
           review_note: string | null;
           requester: { full_name: string };
+          submitter: { full_name: string } | null;
         }[];
       }>(`/api/benefits?${params}`).then((data) =>
         setRows(
           data.requests.map((item) => ({
             id: item.id,
             status: item.status,
-            title: `${item.requester.full_name} · ${item.amount}`,
+            title: `${item.submitter?.full_name ?? 'Finance'} filed for ${item.requester.full_name} · ${item.amount}`,
             detail: item.reason,
             document_url: item.document_url,
             review_note: item.review_note,
@@ -132,6 +161,56 @@ export default function ApprovalsPage() {
         ),
       );
     }
+    if (next === 'overtime') {
+      return apiJson<{
+        requests: {
+          id: string;
+          status: string;
+          hours: number;
+          reason: string;
+          review_note: string | null;
+          work_date: string;
+          requester: { full_name: string };
+        }[];
+      }>(`/api/overtime?${params}`).then((data) =>
+        setRows(
+          data.requests.map((item) => ({
+            id: item.id,
+            status: item.status,
+            title: `${item.requester.full_name} · ${item.hours} hours`,
+            detail: `${item.work_date.slice(0, 10)} · ${item.reason}`,
+            review_note: item.review_note,
+          })),
+        ),
+      );
+    }
+    if (next === 'attendance') {
+      return apiJson<{
+        requests: {
+          id: string;
+          status: string;
+          requested_status: string;
+          reason: string;
+          review_note: string | null;
+          work_date: string;
+          clock_in: string | null;
+          clock_out: string | null;
+          requester: { full_name: string };
+        }[];
+      }>(`/api/attendance-corrections?${params}`).then((data) =>
+        setRows(
+          data.requests.map((item) => ({
+            id: item.id,
+            status: item.status,
+            title: `${item.requester.full_name} · ${item.requested_status.replace('_', ' ')}`,
+            detail: `${item.work_date.slice(0, 10)} · ${item.reason}${
+              item.clock_in ? ` · in ${new Date(item.clock_in).toLocaleTimeString()}` : ''
+            }${item.clock_out ? ` · out ${new Date(item.clock_out).toLocaleTimeString()}` : ''}`,
+            review_note: item.review_note,
+          })),
+        ),
+      );
+    }
     return apiJson<{
       requests: {
         id: string;
@@ -154,11 +233,11 @@ export default function ApprovalsPage() {
   }
 
   useEffect(() => {
-    load('medical', { query: '', status: '', from: '', to: '' }).catch((err: unknown) =>
+    load(tab, { query: '', status: 'pending', from: '', to: '' }).catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab]);
 
   async function review() {
     if (!pending) return;
@@ -169,7 +248,11 @@ export default function ApprovalsPage() {
         ? `/api/benefits/${pending.id}`
         : tab === 'leave'
           ? `/api/leave/${pending.id}`
-          : `/api/profile-requests/${pending.id}`;
+          : tab === 'overtime'
+            ? `/api/overtime/${pending.id}`
+            : tab === 'attendance'
+              ? `/api/attendance-corrections/${pending.id}`
+              : `/api/profile-requests/${pending.id}`;
     try {
       await apiJson(path, {
         method: 'PATCH',
@@ -187,7 +270,7 @@ export default function ApprovalsPage() {
   return (
     <PageFrame
       title="Requests & Approvals"
-      description="Review medical, leave, and profile updates. You cannot approve your own."
+      description="Leave, overtime, attendance, and profile updates. Filed medical and OPD are claims finance submitted for a worker. Employees file their own medical and OPD with Finance."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
@@ -197,8 +280,12 @@ export default function ApprovalsPage() {
             type="button"
             className={tab === item.id ? tabActiveClass : tabIdleClass}
             onClick={() => {
-              setTab(item.id);
-              load(item.id).catch(() => undefined);
+              setError('');
+              setQuery('');
+              setStatus('pending');
+              setFrom('');
+              setTo('');
+              router.replace(`/hr/requests?tab=${item.id}`);
             }}
           >
             {item.label}
@@ -234,8 +321,9 @@ export default function ApprovalsPage() {
           aria-label="From date"
           value={from}
           onChange={(event) => {
-            setFrom(event.target.value);
-            load(tab, { query, status, from: event.target.value, to }).catch(() => undefined);
+            const value = event.target.value;
+            setFrom(value);
+            load(tab, { query, status, from: value, to }).catch(() => undefined);
           }}
         />
         <input
@@ -244,8 +332,9 @@ export default function ApprovalsPage() {
           aria-label="To date"
           value={to}
           onChange={(event) => {
-            setTo(event.target.value);
-            load(tab, { query, status, from, to: event.target.value }).catch(() => undefined);
+            const value = event.target.value;
+            setTo(value);
+            load(tab, { query, status, from, to: value }).catch(() => undefined);
           }}
         />
       </div>

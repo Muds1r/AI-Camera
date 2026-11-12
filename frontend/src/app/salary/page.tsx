@@ -1,88 +1,56 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PageFrame } from '@/components/page-frame';
-import { MetricStrip, Notice } from '@/components/widgets';
+import { PageFrame, fieldClass } from '@/components/page-frame';
+import { PayslipView, type Payslip } from '@/components/payslip-view';
+import { Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
+function currentMonth() {
+  return new Date().toISOString().slice(0, 7);
+}
+
 export default function SalaryPage() {
-  const [salary, setSalary] = useState<{
-    basic: number;
-    allowance: number;
-    deduction: number;
-    net: number;
-  } | null>(null);
-  const [benefits, setBenefits] = useState<{
-    medical: { limit: number; used: number; remaining: number };
-    opd: { limit: number; used: number; remaining: number };
-  } | null>(null);
-  const [leaves, setLeaves] = useState<
-    { allocated: number; used: number; leave_type: { name: string } }[]
-  >([]);
+  const [month, setMonth] = useState('');
+  const [slip, setSlip] = useState<Payslip | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([
-      apiJson<{ salary: { basic: number; allowance: number; deduction: number; net: number } }>(
-        '/api/salary/me',
-      ),
-      apiJson<{
-        medical: { limit: number; used: number; remaining: number };
-        opd: { limit: number; used: number; remaining: number };
-      }>('/api/benefits/balances'),
-      apiJson<{ balances: { allocated: number; used: number; leave_type: { name: string } }[] }>(
-        '/api/leave/balances',
-      ),
-    ])
-      .then(([pay, allowance, leave]) => {
-        setSalary(pay.salary);
-        setBenefits(allowance);
-        setLeaves(leave.balances);
+    const timer = window.setTimeout(() => {
+      setMonth((current) => current || currentMonth());
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!month) return;
+    apiJson<{ payslip: Payslip }>(`/api/payslips/me?month=${month}`)
+      .then((data) => {
+        setSlip(data.payslip);
+        setError('');
       })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load'));
-  }, []);
+  }, [month]);
 
   return (
     <PageFrame
-      title="Pay & Benefits"
-      description="Salary and allowance balances. Submit claims from Requests."
+      title="Payslip"
+      description="Pay for the selected month, after attendance, unpaid leave, overtime, and approved claims."
+      actions={
+        <label className="text-mute flex items-center gap-2 text-xs font-medium">
+          Month
+          <input
+            className={`${fieldClass} w-auto`}
+            type="month"
+            aria-label="Payslip month"
+            value={month}
+            onChange={(event) => setMonth(event.target.value)}
+          />
+        </label>
+      }
     >
       <Notice error={error} />
-      {salary ? (
-        <MetricStrip
-          items={[
-            { label: 'Basic', value: `PKR ${salary.basic.toLocaleString()}` },
-            { label: 'Allowance', value: `PKR ${salary.allowance.toLocaleString()}` },
-            { label: 'Deduction', value: `PKR ${salary.deduction.toLocaleString()}` },
-            { label: 'Net pay', value: `PKR ${salary.net.toLocaleString()}` },
-          ]}
-        />
-      ) : null}
-      {benefits ? (
-        <MetricStrip
-          items={[
-            {
-              label: 'Medical remaining',
-              value: benefits.medical.remaining,
-              hint: `${benefits.medical.used} used of ${benefits.medical.limit}`,
-            },
-            {
-              label: 'OPD remaining',
-              value: benefits.opd.remaining,
-              hint: `${benefits.opd.used} used of ${benefits.opd.limit}`,
-            },
-          ]}
-        />
-      ) : null}
-      {leaves.length > 0 ? (
-        <MetricStrip
-          items={leaves.map((item) => ({
-            label: item.leave_type.name,
-            value: item.allocated - item.used,
-            hint: `${item.used} used of ${item.allocated}`,
-          }))}
-        />
-      ) : null}
+      {slip ? <PayslipView slip={slip} /> : null}
     </PageFrame>
   );
 }

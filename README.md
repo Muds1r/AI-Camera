@@ -111,6 +111,25 @@ FRONTEND_URL=http://localhost:3000
 
 Copy the SQL schema from `backend/src/db/schema.sql` and run it in your **Supabase Dashboard -> SQL Editor**. This creates the required tables (`cameras`, `detections`, `alerts`) and indexes.
 
+### 5. Password reset email (optional)
+
+Forgot password sends a **new random password** to the **secondary (recovery) email** on the account (`secondary_email`), not the login address. Each user must have a distinct secondary email when the account is created.
+
+For **local development**, you can leave `SMTP_*` unset. The backend logs the new password to the console instead of sending mail.
+
+For **real email** (e.g. Gmail with an [app password](https://support.google.com/accounts/answer/185833)), set in `backend/.env`:
+
+```env
+APP_NAME=TruckFlow
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM="TruckFlow <your@gmail.com>"
+```
+
+In production, configure SMTP before enabling forgot password; the API still returns a generic success message and does not reveal whether an account exists.
+
 ---
 
 ## Running the Application

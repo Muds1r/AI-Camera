@@ -2,6 +2,7 @@ export const Role = {
   employee: 'employee',
   dataview: 'dataview',
   hr: 'hr',
+  finance: 'finance',
   super_admin: 'super_admin',
 } as const;
 
@@ -19,10 +20,15 @@ export const Permission = {
   AttendanceSettings: 'attendance:settings',
   MedicalSubmitOwn: 'medical:submit:own',
   MedicalReadOwn: 'medical:read:own',
+  MedicalSubmitFor: 'medical:submit:for',
   MedicalReview: 'medical:review',
+  MedicalReviewOnBehalf: 'medical:review:on-behalf',
   LeaveSubmitOwn: 'leave:submit:own',
   LeaveReadOwn: 'leave:read:own',
   LeaveReview: 'leave:review',
+  OvertimeSubmitOwn: 'overtime:submit:own',
+  OvertimeReadOwn: 'overtime:read:own',
+  OvertimeReview: 'overtime:review',
   SalaryReadOwn: 'salary:read:own',
   SalaryManage: 'salary:manage',
   UsersCreateEmployee: 'users:create:employee',
@@ -46,6 +52,8 @@ const EMPLOYEE_PERMISSIONS = [
   Permission.MedicalReadOwn,
   Permission.LeaveSubmitOwn,
   Permission.LeaveReadOwn,
+  Permission.OvertimeSubmitOwn,
+  Permission.OvertimeReadOwn,
   Permission.SalaryReadOwn,
 ] as const satisfies readonly Permission[];
 
@@ -60,8 +68,9 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   hr: [
     ...EMPLOYEE_PERMISSIONS,
-    Permission.MedicalReview,
+    Permission.MedicalReviewOnBehalf,
     Permission.LeaveReview,
+    Permission.OvertimeReview,
     Permission.AttendanceReadAll,
     Permission.AttendanceSettings,
     Permission.UsersCreateEmployee,
@@ -70,6 +79,12 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
     Permission.SalaryManage,
     Permission.CompanyManage,
   ],
+  finance: [
+    Permission.ProfileReadOwn,
+    Permission.UsersRead,
+    Permission.MedicalSubmitFor,
+    Permission.MedicalReview,
+  ],
   super_admin: Object.values(Permission),
 };
 
@@ -77,6 +92,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   employee: 'Employee',
   dataview: 'DataView',
   hr: 'HR',
+  finance: 'Finance',
   super_admin: 'Super Admin',
 };
 

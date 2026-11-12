@@ -13,18 +13,26 @@ import {
   listBenefits,
   listHolidays,
   listLeave,
+  listOvertime,
+  listAttendanceCorrections,
   listProfileRequests,
   ownAttendance,
   reviewBenefit,
   reviewLeave,
+  reviewOvertime,
+  reviewAttendanceCorrection,
   reviewProfileRequest,
   salaryView,
   saveHoliday,
   submitBenefit,
+  submitBenefitFor,
   submitLeave,
+  submitOvertime,
+  submitAttendanceCorrection,
   submitProfileRequest,
   updateLeaveDefaults,
 } from '../services/workforce.service';
+import { payslipFor } from '../services/payslip.service';
 import { prisma } from '../lib/prisma';
 import { uploadDocument } from '../lib/auth/documents';
 
@@ -79,6 +87,41 @@ router.get(
 );
 
 router.get(
+  '/attendance-corrections',
+  requireAnyPermission(Permission.AttendanceReadOwn, Permission.AttendanceReadAll),
+  asyncHandler(async (req, res) => {
+    res.json({
+      requests: await listAttendanceCorrections(req.auth!, req.query.scope, req.query),
+    });
+  }),
+);
+
+router.post(
+  '/attendance-corrections',
+  requirePermission(Permission.AttendanceClockOwn),
+  asyncHandler(async (req, res) => {
+    res
+      .status(201)
+      .json({ request: await submitAttendanceCorrection(req.auth!.id, req.body ?? {}) });
+  }),
+);
+
+router.patch(
+  '/attendance-corrections/:id',
+  requirePermission(Permission.AttendanceReadAll),
+  asyncHandler(async (req, res) => {
+    res.json({
+      request: await reviewAttendanceCorrection(
+        req.auth!,
+        routeParam(req.params.id),
+        req.body?.status,
+        req.body?.review_note,
+      ),
+    });
+  }),
+);
+
+router.get(
   '/holidays',
   requirePermission(Permission.AttendanceSettings),
   asyncHandler(async (_req, res) => {
@@ -113,7 +156,11 @@ router.get(
 
 router.get(
   '/benefits',
-  requireAnyPermission(Permission.MedicalReadOwn, Permission.MedicalReview),
+  requireAnyPermission(
+    Permission.MedicalReadOwn,
+    Permission.MedicalReview,
+    Permission.MedicalReviewOnBehalf,
+  ),
   asyncHandler(async (req, res) => {
     res.json({
       requests: await listBenefits(req.auth!, req.query.scope, req.query.kind, req.query),
@@ -123,7 +170,7 @@ router.get(
 
 router.post(
   '/benefits/document',
-  requirePermission(Permission.MedicalSubmitOwn),
+  requireAnyPermission(Permission.MedicalSubmitOwn, Permission.MedicalSubmitFor),
   uploadDocument,
   asyncHandler(async (req, res) => {
     if (!req.file) throw new HttpError(400, 'Choose a document to upload');
@@ -139,9 +186,17 @@ router.post(
   }),
 );
 
+router.post(
+  '/benefits/for',
+  requirePermission(Permission.MedicalSubmitFor),
+  asyncHandler(async (req, res) => {
+    res.status(201).json({ request: await submitBenefitFor(req.auth!, req.body ?? {}) });
+  }),
+);
+
 router.patch(
   '/benefits/:id',
-  requirePermission(Permission.MedicalReview),
+  requireAnyPermission(Permission.MedicalReview, Permission.MedicalReviewOnBehalf),
   asyncHandler(async (req, res) => {
     res.json({
       request: await reviewBenefit(
@@ -211,6 +266,55 @@ router.patch(
         req.body?.status,
         req.body?.review_note,
       ),
+    });
+  }),
+);
+
+router.get(
+  '/overtime',
+  requireAnyPermission(Permission.OvertimeReadOwn, Permission.OvertimeReview),
+  asyncHandler(async (req, res) => {
+    res.json({ requests: await listOvertime(req.auth!, req.query.scope, req.query) });
+  }),
+);
+
+router.post(
+  '/overtime',
+  requirePermission(Permission.OvertimeSubmitOwn),
+  asyncHandler(async (req, res) => {
+    res.status(201).json({ request: await submitOvertime(req.auth!.id, req.body ?? {}) });
+  }),
+);
+
+router.patch(
+  '/overtime/:id',
+  requirePermission(Permission.OvertimeReview),
+  asyncHandler(async (req, res) => {
+    res.json({
+      request: await reviewOvertime(
+        req.auth!,
+        routeParam(req.params.id),
+        req.body?.status,
+        req.body?.review_note,
+      ),
+    });
+  }),
+);
+
+router.get(
+  '/payslips/me',
+  requirePermission(Permission.SalaryReadOwn),
+  asyncHandler(async (req, res) => {
+    res.json({ payslip: await payslipFor(req.auth!, req.auth!.id, req.query.month) });
+  }),
+);
+
+router.get(
+  '/payslips/:userId',
+  requirePermission(Permission.SalaryManage),
+  asyncHandler(async (req, res) => {
+    res.json({
+      payslip: await payslipFor(req.auth!, routeParam(req.params.userId), req.query.month),
     });
   }),
 );
