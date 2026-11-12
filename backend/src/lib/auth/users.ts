@@ -151,11 +151,11 @@ export async function createAccount(
   assertPassword(input.password);
   const fullName = assertPersonName(input.full_name, 'Full name');
   const phone = optionalPhone(input.phone);
-  const secondaryEmail = optionalEmail(input.secondary_email, 'Primary email') ?? null;
+  const secondaryEmail = optionalEmail(input.secondary_email, 'Secondary email') ?? null;
   if (!phone) throw new HttpError(400, 'Phone number is required');
-  if (!secondaryEmail) throw new HttpError(400, 'Primary email is required');
+  if (!secondaryEmail) throw new HttpError(400, 'Secondary email is required');
   if (secondaryEmail === email) {
-    throw new HttpError(400, 'Primary email must be different from the company email');
+    throw new HttpError(400, 'Secondary email must be different from the account email');
   }
   const dateOfBirth = optionalDateOfBirth(input.date_of_birth) ?? null;
   const gender = optionalChoice(input.gender, 'Gender', GENDERS) ?? null;
@@ -262,9 +262,9 @@ export async function updateOwnProfile(
   const phone = optionalPhone(input.phone);
   if (phone !== undefined) data.phone = phone;
 
-  const secondaryEmail = optionalEmail(input.secondary_email, 'Primary email');
+  const secondaryEmail = optionalEmail(input.secondary_email, 'Secondary email');
   if (secondaryEmail && secondaryEmail === actor.email) {
-    throw new HttpError(400, 'Primary email must be different from the company email');
+    throw new HttpError(400, 'Secondary email must be different from the account email');
   }
   if (secondaryEmail !== undefined) data.secondary_email = secondaryEmail;
 

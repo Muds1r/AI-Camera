@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { DateField } from '@/components/date-field';
 import {
   PageFrame,
   buttonClass,
@@ -290,7 +289,13 @@ export default function TeamAttendancePage() {
       {tab === 'holidays' ? (
         <>
           <form onSubmit={saveHoliday} className={`${formPanelClass} mb-6 md:grid-cols-4`}>
-            <DateField required placeholder="Enter holiday date" value={date} onChange={setDate} />
+            <input
+              className={fieldClass}
+              type="date"
+              required
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+            />
             <input
               className={fieldClass}
               required

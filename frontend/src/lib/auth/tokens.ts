@@ -1,7 +1,8 @@
 import { jwtVerify } from 'jose';
 import { isRole, Role } from './permissions';
 
-export const ACCESS_COOKIE = 'access_token';
+export { ACCESS_COOKIE, readAccessTokenFromRequest } from './access-token';
+
 export const REFRESH_COOKIE = 'refresh_token';
 export const JWT_ISSUER = 'ai-camera';
 export const JWT_AUDIENCE = 'ai-camera-web';

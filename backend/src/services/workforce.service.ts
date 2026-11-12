@@ -4,7 +4,21 @@ import { HttpError } from '../lib/http';
 import { writeAudit } from '../lib/audit';
 import { AuthUser } from '../lib/auth/session';
 import { roleHasPermission, Permission } from '../lib/auth/permissions';
-import { publicUserSelect } from '../lib/auth/users';
+import { assertEmail, publicUserSelect } from '../lib/auth/users';
+import {
+  BLOOD_GROUPS,
+  GENDERS,
+  assertPersonName,
+  optionalAddress,
+  optionalChoice,
+  optionalDateOfBirth,
+  optionalIdCard,
+  optionalJoinedOn,
+  optionalLabel,
+  optionalNotes,
+  optionalPersonName,
+  optionalPhone,
+} from '../lib/fields';
 
 const COMPANY_ID = 'default';
 
@@ -80,7 +94,7 @@ async function monthContext(year: number, month: number) {
     holidays.map((holiday) => holiday.holiday_on.toISOString().slice(0, 10)),
   );
   const dates = eachDate(year, month);
-  const sundays = dates.filter((date) => date.getUTCDay() === 0).length;
+  const sundays = dates.filter((date) => weekends.has(date.getUTCDay())).length;
   const gazetted = holidays.filter((holiday) => holiday.kind === HolidayKind.gazetted).length;
   const generalOff = holidays.filter((holiday) => holiday.kind === HolidayKind.general_off).length;
   const workingDays = dates.filter(
@@ -101,11 +115,27 @@ async function monthContext(year: number, month: number) {
   };
 }
 
+function parseClockTime(value: string): number {
+  const [hours, minutes] = value.split(':').map(Number);
+  return (hours || 0) * 60 + (minutes || 0);
+}
+
+/** Local wall-clock minutes (matches employee’s typical 9–5 window in their timezone). */
+function minutesOfDay(date: Date): number {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
 function lateStatus(clockIn: Date, workStart: string) {
-  const [hours, minutes] = workStart.split(':').map(Number);
-  const startMinutes = (hours || 0) * 60 + (minutes || 0);
-  const clockMinutes = clockIn.getUTCHours() * 60 + clockIn.getUTCMinutes();
-  return clockMinutes > startMinutes ? 'late' : 'present';
+  return minutesOfDay(clockIn) > parseClockTime(workStart) ? 'late' : 'present';
+}
+
+function assertClockInWindow(now: Date, workStart: string, workEnd: string) {
+  const nowMinutes = minutesOfDay(now);
+  const start = parseClockTime(workStart);
+  const end = parseClockTime(workEnd);
+  if (nowMinutes < start || nowMinutes > end) {
+    throw new HttpError(400, `Clock in is only allowed between ${workStart} and ${workEnd}`);
+  }
 }
 
 export async function clockIn(userId: string) {
@@ -118,6 +148,7 @@ export async function clockIn(userId: string) {
   if (existing?.clock_in) throw new HttpError(409, 'You have already clocked in today');
   const company = await companySettings();
   const now = new Date();
+  assertClockInWindow(now, company.work_start, company.work_end);
   const status = lateStatus(now, company.work_start);
   const record = await prisma.attendance.upsert({
     where: { user_id_work_date: { user_id: userId, work_date: today } },
@@ -302,10 +333,15 @@ export async function submitBenefit(
     throw new HttpError(400, 'Kind must be medical or opd');
   }
   const amount = Number(input.amount);
-  if (!Number.isFinite(amount) || amount <= 0)
-    throw new HttpError(400, 'Amount must be greater than zero');
-  if (typeof input.reason !== 'string' || input.reason.trim().length < 3) {
-    throw new HttpError(400, 'A reason of at least 3 characters is required');
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000) {
+    throw new HttpError(400, 'Amount must be greater than zero and at most 10,000,000');
+  }
+  if (
+    typeof input.reason !== 'string' ||
+    input.reason.trim().length < 3 ||
+    input.reason.trim().length > 2000
+  ) {
+    throw new HttpError(400, 'A reason between 3 and 2000 characters is required');
   }
   let documentUrl: string | null = null;
   if (
@@ -426,6 +462,29 @@ export async function leaveBalances(userId: string) {
   });
 }
 
+export async function updateLeaveDefaults(actor: AuthUser, defaults: Record<string, unknown>) {
+  if (!roleHasPermission(actor.role, Permission.CompanyManage)) {
+    throw new HttpError(403, 'You cannot change leave defaults');
+  }
+  const types = await prisma.leaveType.findMany({ where: { is_active: true } });
+  let updated = false;
+  for (const type of types) {
+    if (defaults[type.code] === undefined) continue;
+    const days = Number(defaults[type.code]);
+    if (!Number.isFinite(days) || days < 0) {
+      throw new HttpError(400, `${type.name} must be zero or greater`);
+    }
+    await prisma.leaveType.update({
+      where: { id: type.id },
+      data: { default_days: Math.floor(days) },
+    });
+    updated = true;
+  }
+  if (!updated) throw new HttpError(400, 'No leave defaults to update');
+  await writeAudit(actor.id, 'leave.defaults', 'company', COMPANY_ID);
+  return prisma.leaveType.findMany({ where: { is_active: true }, orderBy: { name: 'asc' } });
+}
+
 export async function submitLeave(
   userId: string,
   input: { leave_type_id?: unknown; start_date?: unknown; end_date?: unknown; reason?: unknown },
@@ -437,8 +496,12 @@ export async function submitLeave(
   ) {
     throw new HttpError(400, 'Leave type and dates are required');
   }
-  if (typeof input.reason !== 'string' || input.reason.trim().length < 3) {
-    throw new HttpError(400, 'A reason of at least 3 characters is required');
+  if (
+    typeof input.reason !== 'string' ||
+    input.reason.trim().length < 3 ||
+    input.reason.trim().length > 2000
+  ) {
+    throw new HttpError(400, 'A reason between 3 and 2000 characters is required');
   }
   const start = utcDate(new Date(input.start_date));
   const end = utcDate(new Date(input.end_date));
@@ -545,15 +608,12 @@ export async function reviewLeave(
   return updated;
 }
 
-const PROFILE_FIELDS = [
-  'full_name',
-  'phone',
-  'address',
-  'info',
-  'department',
-  'designation',
-  'avatar_url',
-] as const;
+const AVATAR_PATH = /^\/api\/uploads\/avatars\/[0-9a-f-]{36}\.(jpg|png|webp)$/i;
+
+function requiredText(value: string | null | undefined, label: string): string {
+  if (!value) throw new HttpError(400, `${label} is required`);
+  return value;
+}
 
 export async function submitProfileRequest(userId: string, changes: unknown) {
   if (!changes || typeof changes !== 'object' || Array.isArray(changes)) {
@@ -563,101 +623,59 @@ export async function submitProfileRequest(userId: string, changes: unknown) {
   if ('email' in source || 'joined_on' in source || 'role' in source) {
     throw new HttpError(400, 'That detail cannot be changed from a profile request');
   }
-
-  const pending = await prisma.profileUpdateRequest.findFirst({
-    where: { user_id: userId, status: MedicalRequestStatus.pending },
-    select: { id: true },
-  });
-  if (pending) {
-    throw new HttpError(
-      409,
-      'You already have a profile update waiting for HR. Wait for it to be reviewed, or ask HR to reject it first.',
-    );
-  }
-
   const owner = await prisma.user.findUnique({
     where: { id: userId },
     select: { email: true },
   });
   if (!owner) throw new HttpError(404, 'User not found');
 
-  const clean: Record<string, string | null> = {};
-
-  if ('full_name' in source) {
-    if (typeof source.full_name !== 'string') throw new HttpError(400, 'Full name is invalid');
-    clean.full_name = assertPersonName(source.full_name, 'Full name');
+  const fullName =
+    typeof source.full_name === 'string' ? assertPersonName(source.full_name, 'Full name') : null;
+  const phone = optionalPhone(source.phone);
+  const secondaryEmail =
+    source.secondary_email === undefined ||
+    source.secondary_email === null ||
+    source.secondary_email === ''
+      ? null
+      : typeof source.secondary_email === 'string'
+        ? assertEmail(source.secondary_email)
+        : (() => {
+            throw new HttpError(400, 'Secondary email is invalid');
+          })();
+  if (secondaryEmail && secondaryEmail === owner.email) {
+    throw new HttpError(400, 'Secondary email must be different from the account email');
   }
-  if ('phone' in source) {
-    clean.phone = requiredText(optionalPhone(source.phone) ?? null, 'Phone number');
-  }
-  if ('secondary_email' in source) {
-    const secondaryEmail =
-      source.secondary_email === null || source.secondary_email === ''
-        ? null
-        : typeof source.secondary_email === 'string'
-          ? assertEmail(source.secondary_email)
-          : (() => {
-              throw new HttpError(400, 'Primary email is invalid');
-            })();
-    if (secondaryEmail && secondaryEmail === owner.email) {
-      throw new HttpError(400, 'Primary email must be different from the company email');
-    }
-    clean.secondary_email = requiredText(secondaryEmail, 'Primary email');
-  }
-  if ('date_of_birth' in source) {
-    const dateOfBirth = optionalDateOfBirth(source.date_of_birth);
-    clean.date_of_birth = requiredText(
+  const dateOfBirth = optionalDateOfBirth(source.date_of_birth);
+  const clean: Record<string, string | null> = {
+    full_name: requiredText(fullName, 'Full name'),
+    phone: requiredText(phone, 'Phone number'),
+    secondary_email: requiredText(secondaryEmail, 'Secondary email'),
+    date_of_birth: requiredText(
       dateOfBirth ? dateOfBirth.toISOString().slice(0, 10) : null,
       'Date of birth',
-    );
-  }
-  if ('gender' in source) {
-    clean.gender = requiredText(optionalChoice(source.gender, 'Gender', GENDERS) ?? null, 'Gender');
-  }
-  if ('id_card_number' in source) {
-    clean.id_card_number = requiredText(
-      optionalIdCard(source.id_card_number) ?? null,
-      'ID card number',
-    );
-  }
-  if ('address' in source) {
-    clean.address = requiredText(optionalAddress(source.address) ?? null, 'Address');
-  }
-  if ('emergency_contact_name' in source) {
-    clean.emergency_contact_name = requiredText(
-      optionalPersonName(source.emergency_contact_name, 'Emergency contact') ?? null,
+    ),
+    gender: requiredText(optionalChoice(source.gender, 'Gender', GENDERS), 'Gender'),
+    id_card_number: requiredText(optionalIdCard(source.id_card_number), 'ID card number'),
+    address: requiredText(optionalAddress(source.address), 'Address'),
+    emergency_contact_name: requiredText(
+      optionalPersonName(source.emergency_contact_name, 'Emergency contact'),
       'Emergency contact',
-    );
-  }
-  if ('emergency_contact_phone' in source) {
-    clean.emergency_contact_phone = requiredText(
-      optionalPhone(source.emergency_contact_phone, 'Emergency phone') ?? null,
+    ),
+    emergency_contact_phone: requiredText(
+      optionalPhone(source.emergency_contact_phone, 'Emergency phone'),
       'Emergency phone',
-    );
-  }
-  if ('blood_group' in source) {
-    clean.blood_group = optionalChoice(source.blood_group, 'Blood group', BLOOD_GROUPS) ?? null;
-  }
-  if ('department' in source) {
-    clean.department = optionalLabel(source.department, 'Department') ?? null;
-  }
-  if ('designation' in source) {
-    clean.designation = optionalLabel(source.designation, 'Designation') ?? null;
-  }
-  if ('info' in source) {
-    clean.info = optionalNotes(source.info) ?? null;
-  }
+    ),
+    blood_group: optionalChoice(source.blood_group, 'Blood group', BLOOD_GROUPS) ?? null,
+    department: optionalLabel(source.department, 'Department') ?? null,
+    designation: optionalLabel(source.designation, 'Designation') ?? null,
+    info: optionalNotes(source.info) ?? null,
+  };
   if (source.avatar_url !== undefined && source.avatar_url !== null && source.avatar_url !== '') {
     if (typeof source.avatar_url !== 'string' || !AVATAR_PATH.test(source.avatar_url)) {
       throw new HttpError(400, 'Picture is invalid');
     }
     clean.avatar_url = source.avatar_url;
   }
-
-  if (Object.keys(clean).length === 0) {
-    throw new HttpError(400, 'No changes to submit');
-  }
-
   const request = await prisma.profileUpdateRequest.create({
     data: { user_id: userId, changes: clean as Prisma.InputJsonValue },
   });
@@ -710,7 +728,16 @@ export async function reviewProfileRequest(
   const changes = request.changes as Record<string, string | null>;
   const updated = await prisma.$transaction(async (tx) => {
     if (status === MedicalRequestStatus.approved) {
-      await tx.user.update({ where: { id: request.user_id }, data: changes });
+      const { date_of_birth: birth, ...rest } = changes;
+      await tx.user.update({
+        where: { id: request.user_id },
+        data: {
+          ...rest,
+          ...(birth !== undefined
+            ? { date_of_birth: birth ? new Date(`${birth}T00:00:00.000Z`) : null }
+            : {}),
+        },
+      });
     }
     return tx.profileUpdateRequest.update({
       where: { id },
@@ -746,16 +773,11 @@ export async function updateEmployment(
     throw new HttpError(403, 'You can only manage Employee and DataView accounts');
   }
   const data: Prisma.UserUpdateInput = {};
-  const text = (
-    key: 'phone' | 'address' | 'department' | 'designation' | 'info',
-    label: string,
-    max: number,
+  const assign = <K extends keyof Prisma.UserUpdateInput>(
+    key: K,
+    value: Prisma.UserUpdateInput[K] | undefined,
   ) => {
-    if (input[key] === undefined) return;
-    if (input[key] === null || input[key] === '') data[key] = null;
-    else if (typeof input[key] === 'string' && input[key].trim().length <= max)
-      data[key] = input[key].trim();
-    else throw new HttpError(400, `${label} is invalid`);
+    if (value !== undefined) data[key] = value;
   };
   if (input.full_name !== undefined) {
     if (typeof input.full_name !== 'string') throw new HttpError(400, 'Name is invalid');
@@ -776,19 +798,30 @@ export async function updateEmployment(
     } else if (typeof input.secondary_email === 'string') {
       const secondaryEmail = assertEmail(input.secondary_email);
       if (secondaryEmail === accountEmail) {
-        throw new HttpError(400, 'Primary email must be different from the company email');
+        throw new HttpError(400, 'Secondary email must be different from the account email');
       }
       data.secondary_email = secondaryEmail;
     } else {
-      throw new HttpError(400, 'Primary email is invalid');
+      throw new HttpError(400, 'Secondary email is invalid');
     }
-    data.full_name = input.full_name.trim();
   }
-  text('phone', 'Phone', 30);
-  text('address', 'Address', 300);
-  text('department', 'Department', 80);
-  text('designation', 'Designation', 80);
-  text('info', 'Info', 2000);
+  assign('address', optionalAddress(input.address));
+  assign('id_card_number', optionalIdCard(input.id_card_number));
+  assign('date_of_birth', optionalDateOfBirth(input.date_of_birth));
+  assign('gender', optionalChoice(input.gender, 'Gender', GENDERS));
+  assign('blood_group', optionalChoice(input.blood_group, 'Blood group', BLOOD_GROUPS));
+  assign(
+    'emergency_contact_name',
+    optionalPersonName(input.emergency_contact_name, 'Emergency contact'),
+  );
+  assign(
+    'emergency_contact_phone',
+    optionalPhone(input.emergency_contact_phone, 'Emergency phone'),
+  );
+  assign('joined_on', optionalJoinedOn(input.joined_on));
+  assign('department', optionalLabel(input.department, 'Department'));
+  assign('designation', optionalLabel(input.designation, 'Designation'));
+  assign('info', optionalNotes(input.info));
   for (const key of [
     'salary_basic',
     'salary_allowance',
@@ -798,21 +831,13 @@ export async function updateEmployment(
   ] as const) {
     if (input[key] === undefined) continue;
     const parsed = Number(input[key]);
-    if (!Number.isFinite(parsed) || parsed < 0)
-      throw new HttpError(400, `${key} must be zero or greater`);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100_000_000) {
+      throw new HttpError(400, `${key} must be between 0 and 100,000,000`);
+    }
     data[key] = parsed;
   }
   if (input.clock_enabled !== undefined) data.clock_enabled = Boolean(input.clock_enabled);
   if (input.is_active !== undefined) data.is_active = Boolean(input.is_active);
-  if (input.email !== undefined) {
-    if (actor.role !== Role.super_admin) {
-      throw new HttpError(403, 'Only a Super Admin can change an email address');
-    }
-    if (typeof input.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(input.email.trim())) {
-      throw new HttpError(400, 'Email is invalid');
-    }
-    data.email = input.email.trim().toLowerCase();
-  }
   const user = await prisma.user.update({ where: { id: userId }, data, select: publicUserSelect });
   if (input.is_active === false) {
     await prisma.refreshToken.updateMany({
@@ -926,11 +951,6 @@ export async function dashboardFor(actor: AuthUser) {
       }),
     ]);
   const todayCount = Object.fromEntries(todayRows.map((row) => [row.status, row._count._all]));
-  const activity = await prisma.auditLog.findMany({
-    orderBy: { created_at: 'desc' },
-    take: 8,
-    include: { actor: { select: { full_name: true } } },
-  });
   return {
     ...base,
     personal,
@@ -941,10 +961,10 @@ export async function dashboardFor(actor: AuthUser) {
       clockedIn,
       presentToday: todayCount.present ?? 0,
       lateToday: todayCount.late ?? 0,
+      absentToday: todayCount.absent ?? 0,
       pendingMedical,
       pendingLeave,
       pendingProfile,
-      activity,
     },
   };
 }

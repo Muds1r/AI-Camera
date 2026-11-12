@@ -1,8 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { DateField } from '@/components/date-field';
+import { useEffect, useState } from 'react';
 import {
   PageFrame,
   buttonDangerClass,
@@ -38,7 +36,7 @@ interface Row {
 const PROFILE_LABELS: Record<string, string> = {
   full_name: 'Name',
   phone: 'Phone',
-  secondary_email: 'Primary email',
+  secondary_email: 'Secondary email',
   date_of_birth: 'Date of birth',
   gender: 'Gender',
   blood_group: 'Blood group',
@@ -251,18 +249,20 @@ function ApprovalsPageContent() {
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
-        <DateField
-          className="max-w-40"
-          placeholder="From date"
+        <input
+          className={`${fieldClass} max-w-40`}
+          type="date"
+          aria-label="From date"
           value={from}
           onChange={(value) => {
             setFrom(value);
             load(tab, { query, status, from: value, to }).catch(() => undefined);
           }}
         />
-        <DateField
-          className="max-w-40"
-          placeholder="To date"
+        <input
+          className={`${fieldClass} max-w-40`}
+          type="date"
+          aria-label="To date"
           value={to}
           onChange={(value) => {
             setTo(value);
@@ -320,9 +320,7 @@ function ApprovalsPageContent() {
         detail={
           pending?.status === 'rejected'
             ? 'A reason is required. Their balance and profile stay as they are.'
-            : tab === 'profile'
-              ? 'Approving applies the requested personal details to their account.'
-              : 'Approved medical and leave requests update the remaining balances.'
+            : 'Approved medical and leave requests update the remaining balances.'
         }
         confirmLabel={pending?.status === 'rejected' ? 'Reject' : 'Approve'}
         tone={pending?.status === 'rejected' ? 'danger' : 'teal'}

@@ -1,10 +1,14 @@
 import type { Metadata } from 'next';
-import { Geist_Mono, Manrope } from 'next/font/google';
+import { Inter, Geist_Mono } from 'next/font/google';
+import { SessionGuard } from '@/components/session-guard';
+import { ThemeInit } from '@/components/theme-init';
+import { ToastProvider } from '@/components/toast';
 import './globals.css';
 
-const manrope = Manrope({
-  variable: '--font-manrope',
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
+  display: 'swap',
 });
 
 const geistMono = Geist_Mono({
@@ -14,13 +18,21 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: 'TruckFlow',
-  description: 'Employee and HR management for TruckFlow',
+  description: 'Workforce, attendance, and camera operations',
 };
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${manrope.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="flex min-h-full flex-col font-sans">{children}</body>
+    <html
+      lang="en"
+      suppressHydrationWarning
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="text-ink flex min-h-full flex-col font-sans">
+        <ThemeInit />
+        <SessionGuard />
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

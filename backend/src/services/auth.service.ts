@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { User } from '@prisma/client';
+import { Role, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
 import { verifyPassword, verifyPasswordAgainstDummy } from '../lib/auth/passwords';
@@ -67,9 +67,26 @@ export async function login(
   }
 
   const matches = await verifyPassword(password, user.password_hash);
-  if (!matches || !user.is_active) return { ok: false, reason: 'invalid' };
+  if (!matches) return { ok: false, reason: 'invalid' };
+  if (!user.is_active) return { ok: false, reason: 'inactive' };
 
   return issueSession(user, remember);
+}
+
+/** First active HR email for deactivated-account messaging (public on login). */
+export async function hrContactEmail(): Promise<string | null> {
+  const hr = await prisma.user.findFirst({
+    where: { role: Role.hr, is_active: true },
+    orderBy: { created_at: 'asc' },
+    select: { email: true },
+  });
+  if (hr) return hr.email;
+  const admin = await prisma.user.findFirst({
+    where: { role: Role.super_admin, is_active: true },
+    orderBy: { created_at: 'asc' },
+    select: { email: true },
+  });
+  return admin?.email ?? null;
 }
 
 export async function refreshSession(rawToken: string | undefined): Promise<SessionResult> {

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, ReactNode, useEffect, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import {
   PageFrame,
   buttonClass,
@@ -9,7 +9,6 @@ import {
   fieldClass,
   labelClass,
 } from '@/components/page-frame';
-import { DateField } from '@/components/date-field';
 import { PasswordField } from '@/components/password-field';
 import { PictureField } from '@/components/picture-field';
 import { Card, ListRow, Notice } from '@/components/widgets';
@@ -97,11 +96,11 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const dobRef = useRef<HTMLInputElement>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
-  const [dobBounds] = useState(() => ({ min: yearsAgo(80), max: yearsAgo(16) }));
   const savesDirectly = user?.role === 'super_admin' || user?.role === 'hr';
 
   function applyUser(next: SessionUser) {
@@ -133,6 +132,11 @@ export default function ProfilePage() {
   }
 
   useEffect(() => {
+    const input = dobRef.current;
+    if (input) {
+      input.min = yearsAgo(80);
+      input.max = yearsAgo(16);
+    }
     load().catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -168,39 +172,21 @@ export default function ProfilePage() {
     const nextErrors = detailErrors();
     setFieldErrors(nextErrors);
     if (Object.values(nextErrors).some(Boolean)) return;
-
-    const nextValues: Record<string, string> = {
-      full_name: fullName.trim().replace(/\s+/g, ' '),
-      phone,
-      secondary_email: secondaryEmail.trim().toLowerCase(),
-      date_of_birth: dateOfBirth,
-      gender,
-      blood_group: bloodGroup,
-      id_card_number: idCard,
-      address: address.trim(),
-      emergency_contact_name: emergencyName.trim().replace(/\s+/g, ' '),
-      emergency_contact_phone: emergencyPhone,
-      info: info.trim(),
-      department: department.trim(),
-      designation: designation.trim(),
-    };
-
-    const changes: Record<string, string> = {};
-    if (user) {
-      const current: Record<string, string> = {
-        full_name: user.full_name,
-        phone: digitsOnly(user.phone ?? '', 12),
-        secondary_email: (user.secondary_email ?? '').trim().toLowerCase(),
-        date_of_birth: dateInputValue(user.date_of_birth),
-        gender: user.gender ?? '',
-        blood_group: user.blood_group ?? '',
-        id_card_number: digitsOnly(user.id_card_number ?? '', 13),
-        address: (user.address ?? '').trim(),
-        emergency_contact_name: (user.emergency_contact_name ?? '').trim(),
-        emergency_contact_phone: digitsOnly(user.emergency_contact_phone ?? '', 12),
-        info: (user.info ?? '').trim(),
-        department: (user.department ?? '').trim(),
-        designation: (user.designation ?? '').trim(),
+    try {
+      const changes: Record<string, string> = {
+        full_name: fullName.trim().replace(/\s+/g, ' '),
+        phone,
+        secondary_email: secondaryEmail.trim(),
+        date_of_birth: dateOfBirth,
+        gender,
+        blood_group: bloodGroup,
+        id_card_number: idCard,
+        address: address.trim(),
+        emergency_contact_name: emergencyName.trim().replace(/\s+/g, ' '),
+        emergency_contact_phone: emergencyPhone,
+        info,
+        department,
+        designation,
       };
       for (const [key, value] of Object.entries(nextValues)) {
         if (value !== current[key]) changes[key] = value;
@@ -219,12 +205,6 @@ export default function ProfilePage() {
         );
         if (uploaded.avatar_url) changes.avatar_url = uploaded.avatar_url;
       }
-
-      if (Object.keys(changes).length === 0) {
-        setError('No changes to send.');
-        return;
-      }
-
       if (savesDirectly) {
         await apiJson('/api/users/me', { method: 'PATCH', body: JSON.stringify(changes) });
         setMessage('Profile updated.');
@@ -386,8 +366,8 @@ export default function ProfilePage() {
                 />
               </Field>
               <Field
-                label="Primary email"
-                hint="Used for password reset codes"
+                label="Secondary email"
+                hint="Used later for a password reset code"
                 error={fieldErrors.secondary_email}
               >
                 <input
@@ -401,16 +381,14 @@ export default function ProfilePage() {
                 />
               </Field>
               <Field label="Date of birth" error={fieldErrors.date_of_birth}>
-                <div className="mt-1">
-                  <DateField
-                    placeholder="Enter date of birth"
-                    value={dateOfBirth}
-                    onChange={setDateOfBirth}
-                    min={dobBounds.min}
-                    max={dobBounds.max}
-                    required
-                  />
-                </div>
+                <input
+                  ref={dobRef}
+                  className={`${fieldClass} mt-1`}
+                  type="date"
+                  value={dateOfBirth}
+                  onChange={(event) => setDateOfBirth(event.target.value)}
+                  required
+                />
               </Field>
               <Field label="Gender" error={fieldErrors.gender}>
                 <select
@@ -535,9 +513,6 @@ export default function ProfilePage() {
 
           {requests.length > 0 ? (
             <Card title="Update requests">
-              <p className="text-mute mb-3 text-xs">
-                Pending updates wait for HR under Approvals → Profile updates.
-              </p>
               <div className="space-y-2">
                 {requests.map((item) => (
                   <ListRow

@@ -1,31 +1,203 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Navy + teal — light */
 :root {
-  --background: #f8fafc;
-  --foreground: #1e293b;
+  --app-bg: #f3f5f6;
+  --app-bg-accent: #e6eaec;
+  --app-paper: #ffffff;
+  --app-surface: #e9ecef;
+  --app-ink: #0c1929;
+  --app-navy: #0f2744;
+  --app-mute: #5a6578;
+  --app-line: #d7dde5;
+  --app-primary: #134e4a;
+  --app-primary-hover: #0f766e;
+  --app-primary-soft: rgba(19, 78, 74, 0.09);
+  --app-primary-on: #ffffff;
+  --app-accent: #14b8a6;
+  --app-accent-soft: rgba(20, 184, 166, 0.14);
+  --app-success: #0d9f6e;
+  --app-success-soft: rgba(13, 159, 110, 0.12);
+  --app-danger: #dc2626;
+  --app-warning: #d97706;
+  --app-overlay: rgb(12 25 41 / 0.45);
+  --app-shadow: rgb(15 39 68 / 0.06);
+  --app-shadow-md: rgb(15 39 68 / 0.1);
+  --app-shadow-lg: rgb(15 39 68 / 0.14);
+  --app-radius-sm: 0.375rem;
+  --app-radius-md: 0.625rem;
+  --app-radius-lg: 0.875rem;
+  --app-radius-xl: 1.125rem;
+  --app-radius-pill: 9999px;
+}
+
+.dark {
+  --app-bg: #080d14;
+  --app-bg-accent: #0f1724;
+  --app-paper: #111a27;
+  --app-surface: #172333;
+  --app-ink: #eef2f6;
+  --app-navy: #94a8c4;
+  --app-mute: #8b99ab;
+  --app-line: #243044;
+  --app-primary: #5eead4;
+  --app-primary-hover: #99f6e4;
+  --app-primary-soft: rgba(94, 234, 212, 0.1);
+  --app-primary-on: #042f2e;
+  --app-accent: #2dd4bf;
+  --app-accent-soft: rgba(45, 212, 191, 0.12);
+  --app-success: #34d399;
+  --app-success-soft: rgba(52, 211, 153, 0.12);
+  --app-danger: #fb7185;
+  --app-warning: #fbbf24;
+  --app-overlay: rgb(0 0 0 / 0.62);
+  --app-shadow: rgb(0 0 0 / 0.22);
+  --app-shadow-md: rgb(0 0 0 / 0.35);
+  --app-shadow-lg: rgb(0 0 0 / 0.5);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-ink: #1e293b;
-  --color-brand: #142b4a;
-  --color-accent: #142b4a;
-  --color-teal: #14b8a6;
-  --color-canvas: #f8fafc;
-  --color-mute: #64748b;
-  --color-paper: #ffffff;
-  --color-line: #e2e8f0;
-  --color-success: #16a34a;
-  --color-warning: #f59e0b;
-  --color-danger: #dc2626;
-  --color-warm: #14b8a6;
-  --font-sans: var(--font-manrope);
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
   --font-mono: var(--font-geist-mono);
+
+  --color-bg: var(--app-bg);
+  --color-bg-accent: var(--app-bg-accent);
+  --color-paper: var(--app-paper);
+  --color-surface: var(--app-surface);
+  --color-ink: var(--app-ink);
+  --color-navy: var(--app-navy);
+  --color-mute: var(--app-mute);
+  --color-line: var(--app-line);
+  --color-primary: var(--app-primary);
+  --color-primary-hover: var(--app-primary-hover);
+  --color-primary-soft: var(--app-primary-soft);
+  --color-primary-on: var(--app-primary-on);
+  --color-accent: var(--app-accent);
+  --color-accent-soft: var(--app-accent-soft);
+  --color-success: var(--app-success);
+  --color-success-soft: var(--app-success-soft);
+  --color-danger: var(--app-danger);
+  --color-warning: var(--app-warning);
+  --color-overlay: var(--app-overlay);
+  --color-brand: var(--app-primary);
+  --color-teal: var(--app-accent);
+  --color-canvas: var(--app-bg);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-manrope), sans-serif;
+  @apply text-ink min-h-screen font-sans antialiased;
+  background: linear-gradient(
+    165deg,
+    var(--app-bg) 0%,
+    color-mix(in srgb, var(--app-bg-accent) 40%, var(--app-bg)) 50%,
+    var(--app-bg) 100%
+  );
+}
+
+::selection {
+  background: color-mix(in srgb, var(--app-accent) 28%, transparent);
+}
+
+.shadow-card {
+  box-shadow:
+    0 1px 2px var(--app-shadow),
+    0 6px 16px color-mix(in srgb, var(--app-shadow) 70%, transparent);
+}
+
+.shadow-card-hover {
+  box-shadow:
+    0 2px 4px var(--app-shadow-md),
+    0 10px 24px color-mix(in srgb, var(--app-shadow-md) 50%, transparent);
+}
+
+.shadow-elevated {
+  box-shadow:
+    0 8px 24px var(--app-shadow-lg),
+    0 0 0 1px color-mix(in srgb, var(--app-line) 85%, transparent);
+}
+
+.shadow-header {
+  box-shadow:
+    0 1px 0 var(--app-line),
+    0 8px 20px color-mix(in srgb, var(--app-shadow) 55%, transparent);
+}
+
+.text-display {
+  letter-spacing: -0.025em;
+}
+
+.text-caption {
+  letter-spacing: 0.02em;
+}
+
+.nav-active {
+  background: color-mix(in srgb, var(--app-primary-soft) 85%, var(--app-paper));
+  color: var(--app-primary);
+  box-shadow: inset 3px 0 0 var(--app-accent);
+}
+
+.dark .nav-active {
+  background: var(--app-primary-soft);
+  color: var(--app-accent);
+  box-shadow: inset 3px 0 0 var(--app-accent);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateX(1rem) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-fade-up {
+  animation: fade-up 0.3s ease-out both;
+}
+
+.animate-page-enter {
+  animation: page-enter 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-in,
+  .animate-fade-up,
+  .animate-page-enter {
+    animation: none;
+  }
 }

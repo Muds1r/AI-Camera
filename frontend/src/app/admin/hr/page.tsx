@@ -151,7 +151,7 @@ export default function HrAccountsPage() {
           required
           type="email"
           className={fieldClass}
-          placeholder="Enter company email"
+          placeholder="Login email"
           maxLength={254}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
@@ -170,7 +170,7 @@ export default function HrAccountsPage() {
           required
           type="email"
           className={fieldClass}
-          placeholder="Enter primary email"
+          placeholder="Secondary email"
           value={accountSecondaryEmail}
           onChange={(event) => setAccountSecondaryEmail(event.target.value)}
         />
@@ -240,7 +240,7 @@ export default function HrAccountsPage() {
           <input
             className={fieldClass}
             type="email"
-            placeholder="Enter primary email"
+            placeholder="Secondary email"
             value={secondaryEmail}
             onChange={(event) => setSecondaryEmail(event.target.value)}
           />

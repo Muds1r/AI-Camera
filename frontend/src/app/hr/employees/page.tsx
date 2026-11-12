@@ -1,11 +1,48 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
+import {
+  DataPanel,
+  PageFrame,
+  PageSection,
+  PageToolbar,
+  buttonClass,
+  fieldClass,
+  formPanelClass,
+  labelClass,
+} from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
-import { ConfirmDialog, Notice } from '@/components/widgets';
+import {
+  Notice,
+  Pagination,
+  Switch,
+  tableClass,
+  tableHeadClass,
+  tableRowClass,
+  tableWrapClass,
+} from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import type { SessionUser } from '@/lib/auth/types';
+import {
+  BLOOD_GROUPS,
+  GENDERS,
+  choiceError,
+  dateInputValue,
+  dateOfBirthError,
+  digitsOnly,
+  emailError,
+  firstError,
+  idCardError,
+  joinedOnError,
+  labelError,
+  nameError,
+  notesError,
+  addressError,
+  passwordError,
+  phoneError,
+  secondaryEmailError,
+  withoutDigits,
+} from '@/lib/fields';
 
 interface Balance {
   id: string;
@@ -14,42 +51,64 @@ interface Balance {
   leave_type: { code: string; name: string };
 }
 
+function formatAmount(value: number) {
+  return value === 0 ? '' : String(value);
+}
+
+function parseAmount(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 0;
+  return Number(trimmed);
+}
+
 export default function EmployeesPage() {
   const [users, setUsers] = useState<SessionUser[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
   const [role, setRole] = useState('');
-  const [active, setActive] = useState('');
+  const [activeFilter, setActiveFilter] = useState('true');
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [accountPhone, setAccountPhone] = useState('');
+  const [accountSecondaryEmail, setAccountSecondaryEmail] = useState('');
+  const [accountIdCard, setAccountIdCard] = useState('');
+  const [accountDob, setAccountDob] = useState('');
+  const [accountGender, setAccountGender] = useState('');
+  const [accountJoined, setAccountJoined] = useState('');
   const [password, setPassword] = useState('');
   const [newRole, setNewRole] = useState<'employee' | 'dataview'>('employee');
   const [department, setDepartment] = useState('');
   const [designation, setDesignation] = useState('');
-  const [salary, setSalary] = useState('0');
-  const [allowance, setAllowance] = useState('0');
-  const [deduction, setDeduction] = useState('0');
-  const [medical, setMedical] = useState('0');
-  const [opd, setOpd] = useState('0');
+  const [salary, setSalary] = useState('');
+  const [allowance, setAllowance] = useState('');
+  const [medical, setMedical] = useState('');
+  const [opd, setOpd] = useState('');
   const [selected, setSelected] = useState<SessionUser | null>(null);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [phone, setPhone] = useState('');
+  const [secondaryEmail, setSecondaryEmail] = useState('');
+  const [idCard, setIdCard] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [gender, setGender] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [emergencyName, setEmergencyName] = useState('');
+  const [emergencyPhone, setEmergencyPhone] = useState('');
+  const [joinedOn, setJoinedOn] = useState('');
   const [address, setAddress] = useState('');
   const [info, setInfo] = useState('');
   const [editDepartment, setEditDepartment] = useState('');
   const [editDesignation, setEditDesignation] = useState('');
-  const [editSalary, setEditSalary] = useState('0');
-  const [editAllowance, setEditAllowance] = useState('0');
-  const [editDeduction, setEditDeduction] = useState('0');
-  const [editMedical, setEditMedical] = useState('0');
-  const [editOpd, setEditOpd] = useState('0');
+  const [editSalary, setEditSalary] = useState('');
+  const [editAllowance, setEditAllowance] = useState('');
+  const [editDeduction, setEditDeduction] = useState('');
+  const [editMedical, setEditMedical] = useState('');
+  const [editOpd, setEditOpd] = useState('');
   const [clockEnabled, setClockEnabled] = useState(true);
-  const [confirming, setConfirming] = useState<SessionUser | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
-  function load(nextPage = page, q = query, nextRole = role, nextActive = active) {
+  function load(nextPage = page, q = query, nextRole = role, nextActive = activeFilter) {
     const params = new URLSearchParams({ q, page: String(nextPage) });
     if (nextRole) params.set('role', nextRole);
     if (nextActive) params.set('active', nextActive);
@@ -60,7 +119,7 @@ export default function EmployeesPage() {
   }
 
   useEffect(() => {
-    load(1, '', '', '').catch((err: unknown) =>
+    load(1, '', '', 'true').catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -70,28 +129,68 @@ export default function EmployeesPage() {
     event.preventDefault();
     setError('');
     setMessage('');
+    const employee = newRole === 'employee';
+    const problem = firstError({
+      full_name: nameError(fullName),
+      email: emailError(email, true),
+      phone: phoneError(accountPhone, true),
+      secondary_email: secondaryEmailError(accountSecondaryEmail, email, true),
+      id_card_number: idCardError(accountIdCard, employee),
+      date_of_birth: dateOfBirthError(accountDob, employee),
+      gender: choiceError(
+        accountGender,
+        'Gender',
+        GENDERS.map((item) => item.value),
+        employee,
+      ),
+      joined_on: joinedOnError(accountJoined),
+      department: labelError(department, 'Department'),
+      designation: labelError(designation, 'Designation'),
+      password: passwordError(password, true),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     try {
       await apiJson('/api/users', {
         method: 'POST',
         body: JSON.stringify({
           full_name: fullName,
           email,
+          phone: accountPhone,
+          secondary_email: accountSecondaryEmail,
+          id_card_number: accountIdCard,
+          date_of_birth: accountDob,
+          gender: accountGender,
+          joined_on: accountJoined,
           password,
           role: newRole,
           department,
           designation,
-          salary_basic: Number(salary),
-          salary_allowance: Number(allowance),
-          salary_deduction: Number(deduction),
-          medical_limit: Number(medical),
-          opd_limit: Number(opd),
+          salary_basic: parseAmount(salary),
+          salary_allowance: parseAmount(allowance),
+          medical_limit: parseAmount(medical),
+          opd_limit: parseAmount(opd),
           clock_enabled: newRole !== 'dataview',
         }),
       });
       setMessage('Account created.');
       setFullName('');
       setEmail('');
+      setAccountPhone('');
+      setAccountSecondaryEmail('');
+      setAccountIdCard('');
+      setAccountDob('');
+      setAccountGender('');
+      setAccountJoined('');
       setPassword('');
+      setDepartment('');
+      setDesignation('');
+      setSalary('');
+      setAllowance('');
+      setMedical('');
+      setOpd('');
       await load(1);
       setPage(1);
     } catch (err) {
@@ -107,15 +206,23 @@ export default function EmployeesPage() {
     setSelected(data.user);
     setBalances(data.balances);
     setPhone(data.user.phone || '');
+    setSecondaryEmail(data.user.secondary_email || '');
+    setIdCard(digitsOnly(data.user.id_card_number || '', 13));
+    setDateOfBirth(dateInputValue(data.user.date_of_birth));
+    setGender(data.user.gender || '');
+    setBloodGroup(data.user.blood_group || '');
+    setEmergencyName(data.user.emergency_contact_name || '');
+    setEmergencyPhone(digitsOnly(data.user.emergency_contact_phone || '', 12));
+    setJoinedOn(dateInputValue(data.user.joined_on));
     setAddress(data.user.address || '');
     setInfo(data.user.info || '');
     setEditDepartment(data.user.department || '');
     setEditDesignation(data.user.designation || '');
-    setEditSalary(String(data.user.salary_basic));
-    setEditAllowance(String(data.user.salary_allowance));
-    setEditDeduction(String(data.user.salary_deduction));
-    setEditMedical(String(data.user.medical_limit));
-    setEditOpd(String(data.user.opd_limit));
+    setEditSalary(formatAmount(data.user.salary_basic));
+    setEditAllowance(formatAmount(data.user.salary_allowance));
+    setEditDeduction(formatAmount(data.user.salary_deduction));
+    setEditMedical(formatAmount(data.user.medical_limit));
+    setEditOpd(formatAmount(data.user.opd_limit));
     setClockEnabled(data.user.clock_enabled);
   }
 
@@ -124,6 +231,34 @@ export default function EmployeesPage() {
     if (!selected) return;
     setError('');
     setMessage('');
+    const employee = selected.role === 'employee';
+    const problem = firstError({
+      full_name: nameError(selected.full_name),
+      phone: phoneError(phone, true),
+      secondary_email: secondaryEmailError(secondaryEmail, selected.email, true),
+      id_card_number: idCardError(idCard, employee),
+      date_of_birth: dateOfBirthError(dateOfBirth, employee),
+      gender: choiceError(
+        gender,
+        'Gender',
+        GENDERS.map((item) => item.value),
+        employee,
+      ),
+      blood_group: choiceError(bloodGroup, 'Blood group', BLOOD_GROUPS, false),
+      emergency_contact_name: emergencyName.trim()
+        ? nameError(emergencyName, 'Emergency contact')
+        : '',
+      emergency_contact_phone: phoneError(emergencyPhone, false, 'Emergency phone'),
+      joined_on: joinedOnError(joinedOn),
+      address: addressError(address, false),
+      department: labelError(editDepartment, 'Department'),
+      designation: labelError(editDesignation, 'Designation'),
+      info: notesError(info),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     const leave_allocations = Object.fromEntries(
       balances.map((item) => [item.leave_type.code, item.allocated]),
     );
@@ -133,15 +268,23 @@ export default function EmployeesPage() {
         body: JSON.stringify({
           full_name: selected.full_name,
           phone,
+          secondary_email: secondaryEmail,
+          id_card_number: idCard,
+          date_of_birth: dateOfBirth,
+          gender,
+          blood_group: bloodGroup,
+          emergency_contact_name: emergencyName,
+          emergency_contact_phone: emergencyPhone,
+          joined_on: joinedOn,
           address,
           info,
           department: editDepartment,
           designation: editDesignation,
-          salary_basic: Number(editSalary),
-          salary_allowance: Number(editAllowance),
-          salary_deduction: Number(editDeduction),
-          medical_limit: Number(editMedical),
-          opd_limit: Number(editOpd),
+          salary_basic: parseAmount(editSalary),
+          salary_allowance: parseAmount(editAllowance),
+          salary_deduction: parseAmount(editDeduction),
+          medical_limit: parseAmount(editMedical),
+          opd_limit: parseAmount(editOpd),
           clock_enabled: clockEnabled,
           leave_allocations,
         }),
@@ -153,352 +296,466 @@ export default function EmployeesPage() {
     }
   }
 
-  async function toggle(person: SessionUser) {
-    await apiJson(`/api/users/${person.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_active: !person.is_active }),
-    });
-    setConfirming(null);
-    setMessage(person.is_active ? 'Account deactivated.' : 'Account activated.');
-    await load();
+  async function setActive(person: SessionUser, isActive: boolean) {
+    if (person.is_active === isActive) return;
+    setError('');
+    try {
+      await apiJson(`/api/users/${person.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: isActive }),
+      });
+      setMessage(isActive ? 'Account activated.' : 'Account deactivated.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update status');
+    }
   }
 
   const pages = Math.max(1, Math.ceil(total / 20));
 
   return (
-    <PageFrame
-      title="Employees"
-      description="Create and update Employee or DataView accounts. Email stays with the account that was created."
-    >
+    <PageFrame title="Employees">
       <Notice error={error} message={message} />
-      <form
-        onSubmit={create}
-        className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
+
+      <PageSection
+        title="New account"
+        description="Employees also need a 13-digit ID card, date of birth, and gender. Phone numbers are 10 to 12 digits."
       >
-        <input
-          required
-          className={fieldClass}
-          placeholder="Full name"
-          value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
-        />
-        <input
-          required
-          type="email"
-          className={fieldClass}
-          placeholder="Email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          placeholder="Department"
-          value={department}
-          onChange={(event) => setDepartment(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          placeholder="Designation"
-          value={designation}
-          onChange={(event) => setDesignation(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          type="number"
-          min="0"
-          placeholder="Basic salary"
-          value={salary}
-          onChange={(event) => setSalary(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          type="number"
-          min="0"
-          placeholder="Allowance"
-          value={allowance}
-          onChange={(event) => setAllowance(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          type="number"
-          min="0"
-          placeholder="Deduction"
-          value={deduction}
-          onChange={(event) => setDeduction(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          type="number"
-          min="0"
-          placeholder="Medical limit"
-          value={medical}
-          onChange={(event) => setMedical(event.target.value)}
-        />
-        <input
-          className={fieldClass}
-          type="number"
-          min="0"
-          placeholder="OPD limit"
-          value={opd}
-          onChange={(event) => setOpd(event.target.value)}
-        />
-        <select
-          className={fieldClass}
-          value={newRole}
-          onChange={(event) => setNewRole(event.target.value as 'employee' | 'dataview')}
-        >
-          <option value="employee">Employee</option>
-          <option value="dataview">DataView</option>
-        </select>
-        <PasswordField
-          required
-          value={password}
-          onChange={setPassword}
-          placeholder="Temporary password"
-        />
-        <button className={buttonClass} type="submit">
-          Create account
-        </button>
-      </form>
-
-      <div className="mb-4 flex flex-wrap gap-2">
-        <input
-          className={`${fieldClass} max-w-sm`}
-          placeholder="Search name, email, department"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setPage(1);
-            load(1, event.target.value).catch(() => undefined);
-          }}
-        />
-        <select
-          className={`${fieldClass} max-w-40`}
-          value={role}
-          onChange={(event) => {
-            setRole(event.target.value);
-            setPage(1);
-            load(1, query, event.target.value).catch(() => undefined);
-          }}
-        >
-          <option value="">All roles</option>
-          <option value="employee">Employee</option>
-          <option value="dataview">DataView</option>
-        </select>
-        <select
-          className={`${fieldClass} max-w-40`}
-          value={active}
-          onChange={(event) => {
-            setActive(event.target.value);
-            setPage(1);
-            load(1, query, role, event.target.value).catch(() => undefined);
-          }}
-        >
-          <option value="">Any status</option>
-          <option value="true">Active</option>
-          <option value="false">Inactive</option>
-        </select>
-      </div>
-
-      <div className="border-line bg-paper overflow-x-auto rounded-xl border shadow-sm">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="bg-canvas text-mute text-xs font-bold uppercase">
-            <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Department</th>
-              <th className="px-4 py-3">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.length === 0 ? (
-              <tr>
-                <td className="text-mute px-4 py-6" colSpan={4}>
-                  No accounts match these filters.
-                </td>
-              </tr>
-            ) : null}
-            {users.map((person) => (
-              <tr key={person.id} className="border-line border-t">
-                <td className="px-4 py-3 font-bold">
-                  <button
-                    type="button"
-                    className="text-left"
-                    onClick={() => openPerson(person).catch(() => undefined)}
-                  >
-                    {person.full_name}
-                    <span className="text-mute block font-medium">{person.email}</span>
-                  </button>
-                </td>
-                <td className="px-4 py-3 capitalize">{person.role}</td>
-                <td className="px-4 py-3">
-                  {person.department || '—'} · {person.designation || '—'}
-                </td>
-                <td className="px-4 py-3">
-                  <button type="button" className="font-bold" onClick={() => setConfirming(person)}>
-                    {person.is_active ? 'Active' : 'Inactive'}
-                  </button>
-                </td>
-              </tr>
+        <form onSubmit={create} className={`${formPanelClass} md:grid-cols-2`}>
+          <input
+            required
+            className={fieldClass}
+            placeholder="Full name"
+            maxLength={80}
+            value={fullName}
+            onChange={(event) => setFullName(withoutDigits(event.target.value))}
+          />
+          <input
+            required
+            type="email"
+            className={fieldClass}
+            placeholder="Login email"
+            autoComplete="off"
+            maxLength={254}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
+          <input
+            required
+            type="tel"
+            inputMode="numeric"
+            className={fieldClass}
+            placeholder="Phone, 10–12 digits"
+            autoComplete="off"
+            maxLength={12}
+            value={accountPhone}
+            onChange={(event) => setAccountPhone(digitsOnly(event.target.value, 12))}
+          />
+          <input
+            required
+            type="email"
+            className={fieldClass}
+            placeholder="Secondary email"
+            autoComplete="off"
+            maxLength={254}
+            value={accountSecondaryEmail}
+            onChange={(event) => setAccountSecondaryEmail(event.target.value)}
+          />
+          <input
+            className={fieldClass}
+            inputMode="numeric"
+            placeholder="ID card, 13 digits"
+            maxLength={13}
+            value={accountIdCard}
+            onChange={(event) => setAccountIdCard(digitsOnly(event.target.value, 13))}
+          />
+          <input
+            className={fieldClass}
+            type="date"
+            aria-label="Date of birth"
+            value={accountDob}
+            onChange={(event) => setAccountDob(event.target.value)}
+          />
+          <select
+            className={fieldClass}
+            aria-label="Gender"
+            value={accountGender}
+            onChange={(event) => setAccountGender(event.target.value)}
+          >
+            <option value="">Gender</option>
+            {GENDERS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
             ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="mt-3 flex items-center gap-3 text-sm">
-        <button
-          type="button"
-          className="font-bold"
-          disabled={page <= 1}
-          onClick={() => {
-            const next = page - 1;
-            setPage(next);
-            load(next).catch(() => undefined);
-          }}
-        >
-          Previous
-        </button>
-        <span className="text-mute">
-          Page {page} of {pages}
-        </span>
-        <button
-          type="button"
-          className="font-bold"
-          disabled={page >= pages}
-          onClick={() => {
-            const next = page + 1;
-            setPage(next);
-            load(next).catch(() => undefined);
-          }}
-        >
-          Next
-        </button>
-      </div>
-
-      {selected ? (
-        <form
-          onSubmit={savePerson}
-          className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-        >
-          <h2 className="font-extrabold md:col-span-2">{selected.full_name}</h2>
-          <p className="text-mute text-sm md:col-span-2">{selected.email}</p>
+          </select>
           <input
             className={fieldClass}
-            value={selected.full_name}
-            onChange={(event) => setSelected({ ...selected, full_name: event.target.value })}
-          />
-          <input
-            className={fieldClass}
-            placeholder="Phone"
-            value={phone}
-            onChange={(event) => setPhone(event.target.value)}
-          />
-          <input
-            className={fieldClass}
-            placeholder="Address"
-            value={address}
-            onChange={(event) => setAddress(event.target.value)}
+            type="date"
+            aria-label="Joining date"
+            value={accountJoined}
+            onChange={(event) => setAccountJoined(event.target.value)}
           />
           <input
             className={fieldClass}
             placeholder="Department"
-            value={editDepartment}
-            onChange={(event) => setEditDepartment(event.target.value)}
+            value={department}
+            onChange={(event) => setDepartment(event.target.value)}
           />
           <input
             className={fieldClass}
             placeholder="Designation"
-            value={editDesignation}
-            onChange={(event) => setEditDesignation(event.target.value)}
-          />
-          <input
-            className={fieldClass}
-            placeholder="Employment notes"
-            value={info}
-            onChange={(event) => setInfo(event.target.value)}
+            value={designation}
+            onChange={(event) => setDesignation(event.target.value)}
           />
           <input
             className={fieldClass}
             type="number"
             min="0"
-            value={editSalary}
-            onChange={(event) => setEditSalary(event.target.value)}
+            placeholder="Basic salary"
+            value={salary}
+            onChange={(event) => setSalary(event.target.value)}
           />
           <input
             className={fieldClass}
             type="number"
             min="0"
-            value={editAllowance}
-            onChange={(event) => setEditAllowance(event.target.value)}
+            placeholder="Allowance"
+            value={allowance}
+            onChange={(event) => setAllowance(event.target.value)}
           />
           <input
             className={fieldClass}
             type="number"
             min="0"
-            value={editDeduction}
-            onChange={(event) => setEditDeduction(event.target.value)}
+            placeholder="Medical limit"
+            value={medical}
+            onChange={(event) => setMedical(event.target.value)}
           />
           <input
             className={fieldClass}
             type="number"
             min="0"
-            value={editMedical}
-            onChange={(event) => setEditMedical(event.target.value)}
+            placeholder="OPD limit"
+            value={opd}
+            onChange={(event) => setOpd(event.target.value)}
           />
-          <input
+          <select
             className={fieldClass}
-            type="number"
-            min="0"
-            value={editOpd}
-            onChange={(event) => setEditOpd(event.target.value)}
+            value={newRole}
+            onChange={(event) => setNewRole(event.target.value as 'employee' | 'dataview')}
+          >
+            <option value="employee">Employee</option>
+            <option value="dataview">DataView</option>
+          </select>
+          <PasswordField
+            required
+            value={password}
+            onChange={setPassword}
+            placeholder="Password, letter and number"
           />
-          <label className="flex items-center gap-2 text-sm font-bold">
-            <input
-              type="checkbox"
-              checked={clockEnabled}
-              onChange={(event) => setClockEnabled(event.target.checked)}
-            />
-            Clock in enabled
-          </label>
-          {balances.map((item) => (
-            <label key={item.id} className="text-xs font-bold uppercase">
-              {item.leave_type.name} allocated
-              <input
-                className={`${fieldClass} mt-1`}
-                type="number"
-                min="0"
-                value={item.allocated}
-                onChange={(event) =>
-                  setBalances((current) =>
-                    current.map((balance) =>
-                      balance.id === item.id
-                        ? { ...balance, allocated: Number(event.target.value) }
-                        : balance,
-                    ),
-                  )
-                }
-              />
-            </label>
-          ))}
           <button className={buttonClass} type="submit">
-            Save employee
+            Create account
           </button>
         </form>
-      ) : null}
+      </PageSection>
 
-      <ConfirmDialog
-        open={Boolean(confirming)}
-        title={confirming?.is_active ? 'Deactivate this account?' : 'Activate this account?'}
-        detail={
-          confirming
-            ? `${confirming.full_name} will ${confirming.is_active ? 'lose' : 'regain'} access.`
-            : undefined
-        }
-        confirmLabel={confirming?.is_active ? 'Deactivate' : 'Activate'}
-        onClose={() => setConfirming(null)}
-        onConfirm={() => {
-          if (confirming) toggle(confirming).catch(() => undefined);
-        }}
-      />
+      <PageSection title="Directory" description="Search, filter, and open an account to edit.">
+        <PageToolbar>
+          <input
+            className={`${fieldClass} max-w-sm flex-1`}
+            placeholder="Search name, email, department"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setPage(1);
+              load(1, event.target.value).catch(() => undefined);
+            }}
+          />
+          <select
+            className={`${fieldClass} max-w-40`}
+            value={role}
+            onChange={(event) => {
+              setRole(event.target.value);
+              setPage(1);
+              load(1, query, event.target.value).catch(() => undefined);
+            }}
+          >
+            <option value="">All roles</option>
+            <option value="employee">Employee</option>
+            <option value="dataview">DataView</option>
+          </select>
+          <select
+            className={`${fieldClass} max-w-44`}
+            value={activeFilter}
+            onChange={(event) => {
+              setActiveFilter(event.target.value);
+              setPage(1);
+              load(1, query, role, event.target.value).catch(() => undefined);
+            }}
+            aria-label="Filter by account status"
+          >
+            <option value="">All statuses</option>
+            <option value="true">Active</option>
+            <option value="false">Inactive</option>
+          </select>
+        </PageToolbar>
+
+        <DataPanel
+          footer={
+            <Pagination
+              page={page}
+              totalPages={pages}
+              total={total}
+              pageSize={20}
+              onPageChange={(next) => {
+                setPage(next);
+                load(next).catch(() => undefined);
+              }}
+            />
+          }
+        >
+          <div className={tableWrapClass}>
+            <table className={tableClass}>
+              <thead className={tableHeadClass}>
+                <tr>
+                  <th className="px-4 py-3.5">Name</th>
+                  <th className="px-4 py-3.5">Role</th>
+                  <th className="px-4 py-3.5">Department</th>
+                  <th className="px-4 py-3.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.length === 0 ? (
+                  <tr>
+                    <td className="text-mute px-4 py-6" colSpan={4}>
+                      No accounts match these filters.
+                    </td>
+                  </tr>
+                ) : null}
+                {users.map((person) => (
+                  <tr key={person.id} className={tableRowClass}>
+                    <td className="px-4 py-3 font-semibold">
+                      <button
+                        type="button"
+                        className="text-left"
+                        onClick={() => openPerson(person).catch(() => undefined)}
+                      >
+                        {person.full_name}
+                        <span className="text-mute block font-medium">{person.email}</span>
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 capitalize">{person.role}</td>
+                    <td className="px-4 py-3">
+                      {person.department || '—'} · {person.designation || '—'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Switch
+                          checked={person.is_active}
+                          onChange={(next) => setActive(person, next).catch(() => undefined)}
+                          label={`${person.full_name} active`}
+                        />
+                        <span className="text-mute text-xs font-medium">
+                          {person.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </DataPanel>
+      </PageSection>
+
+      {selected ? (
+        <PageSection title="Edit account" description={selected.email}>
+          <form onSubmit={savePerson} className={`${formPanelClass} md:grid-cols-2`}>
+            <h2 className="text-ink text-sm font-medium md:col-span-2">{selected.full_name}</h2>
+            <p className="text-mute text-sm md:col-span-2">{selected.email}</p>
+            <input
+              className={fieldClass}
+              maxLength={80}
+              value={selected.full_name}
+              onChange={(event) =>
+                setSelected({ ...selected, full_name: withoutDigits(event.target.value) })
+              }
+            />
+            <input
+              className={fieldClass}
+              type="tel"
+              inputMode="numeric"
+              placeholder="Phone, 10–12 digits"
+              maxLength={12}
+              value={phone}
+              onChange={(event) => setPhone(digitsOnly(event.target.value, 12))}
+            />
+            <input
+              className={fieldClass}
+              type="email"
+              placeholder="Secondary email"
+              maxLength={254}
+              value={secondaryEmail}
+              onChange={(event) => setSecondaryEmail(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              inputMode="numeric"
+              placeholder="ID card, 13 digits"
+              maxLength={13}
+              value={idCard}
+              onChange={(event) => setIdCard(digitsOnly(event.target.value, 13))}
+            />
+            <input
+              className={fieldClass}
+              type="date"
+              aria-label="Date of birth"
+              value={dateOfBirth}
+              onChange={(event) => setDateOfBirth(event.target.value)}
+            />
+            <select
+              className={fieldClass}
+              aria-label="Gender"
+              value={gender}
+              onChange={(event) => setGender(event.target.value)}
+            >
+              <option value="">Gender</option>
+              {GENDERS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={fieldClass}
+              aria-label="Blood group"
+              value={bloodGroup}
+              onChange={(event) => setBloodGroup(event.target.value)}
+            >
+              <option value="">Blood group</option>
+              {BLOOD_GROUPS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+            <input
+              className={fieldClass}
+              placeholder="Emergency contact name"
+              maxLength={80}
+              value={emergencyName}
+              onChange={(event) => setEmergencyName(withoutDigits(event.target.value))}
+            />
+            <input
+              className={fieldClass}
+              type="tel"
+              inputMode="numeric"
+              placeholder="Emergency phone, 10–12 digits"
+              maxLength={12}
+              value={emergencyPhone}
+              onChange={(event) => setEmergencyPhone(digitsOnly(event.target.value, 12))}
+            />
+            <input
+              className={fieldClass}
+              type="date"
+              aria-label="Joining date"
+              value={joinedOn}
+              onChange={(event) => setJoinedOn(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              placeholder="Address"
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              placeholder="Department"
+              value={editDepartment}
+              onChange={(event) => setEditDepartment(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              placeholder="Designation"
+              value={editDesignation}
+              onChange={(event) => setEditDesignation(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              placeholder="Employment notes"
+              value={info}
+              onChange={(event) => setInfo(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0"
+              value={editSalary}
+              onChange={(event) => setEditSalary(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0"
+              value={editAllowance}
+              onChange={(event) => setEditAllowance(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0"
+              value={editDeduction}
+              onChange={(event) => setEditDeduction(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0"
+              value={editMedical}
+              onChange={(event) => setEditMedical(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0"
+              value={editOpd}
+              onChange={(event) => setEditOpd(event.target.value)}
+            />
+            <label className="flex items-center gap-2 text-sm font-bold">
+              <input
+                type="checkbox"
+                checked={clockEnabled}
+                onChange={(event) => setClockEnabled(event.target.checked)}
+              />
+              Clock in enabled
+            </label>
+            {balances.map((item) => (
+              <label key={item.id} className={labelClass}>
+                {item.leave_type.name} allocated
+                <input
+                  className={`${fieldClass} mt-1`}
+                  type="number"
+                  min="0"
+                  value={item.allocated === 0 ? '' : item.allocated}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    const next = raw.trim() === '' ? 0 : Number(raw);
+                    setBalances((current) =>
+                      current.map((balance) =>
+                        balance.id === item.id ? { ...balance, allocated: next } : balance,
+                      ),
+                    );
+                  }}
+                />
+              </label>
+            ))}
+            <button className={buttonClass} type="submit">
+              Save employee
+            </button>
+          </form>
+        </PageSection>
+      ) : null}
     </PageFrame>
   );
 }

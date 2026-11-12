@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { PageFrame } from '@/components/page-frame';
+import { EmptyState, ListRow, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 interface Log {
@@ -24,23 +25,25 @@ export default function LogsPage() {
   }, []);
 
   return (
-    <PageFrame title="Activity" description="Important account, request, and settings changes.">
-      {error ? <p className="text-danger text-sm font-bold">{error}</p> : null}
-      <ul className="space-y-2">
+    <PageFrame title="Activity" description="Account, request, and settings changes.">
+      <Notice error={error} />
+      {logs.length === 0 && !error ? <EmptyState>No activity recorded.</EmptyState> : null}
+      <div className="space-y-2">
         {logs.map((log) => (
-          <li
+          <ListRow
             key={log.id}
-            className="border-line bg-paper rounded-xl border px-4 py-3 text-sm shadow-sm"
-          >
-            <p className="font-extrabold">{log.action}</p>
-            <p className="text-mute">
-              {log.actor?.full_name || 'System'} · {log.target_type} ·{' '}
-              {new Date(log.created_at).toLocaleString()}
-            </p>
-            {log.detail ? <p>{log.detail}</p> : null}
-          </li>
+            title={log.action}
+            detail={[
+              log.actor?.full_name || 'System',
+              log.target_type,
+              new Date(log.created_at).toLocaleString(),
+              log.detail,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          />
         ))}
-      </ul>
+      </div>
     </PageFrame>
   );
 }

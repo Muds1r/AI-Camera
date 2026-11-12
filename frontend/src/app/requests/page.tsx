@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { DateField } from '@/components/date-field';
 import {
   PageFrame,
   buttonClass,
@@ -196,7 +195,7 @@ export default function RequestsPage() {
             <textarea
               className={`${fieldClass} min-h-20 md:col-span-2`}
               required
-              placeholder="Enter reason"
+              placeholder="Reason"
               maxLength={2000}
               value={reason}
               onChange={(event) => setReason(event.target.value)}

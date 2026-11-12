@@ -5,17 +5,7 @@ import { publicUserSelect } from '../lib/auth/users';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
-import {
-  isForgotPasswordRateLimited,
-  FORGOT_PASSWORD_SUCCESS_MESSAGE,
-} from '../lib/auth/forgot-password-rate-limit';
-import {
-  forgotPassword,
-  hrContactEmail,
-  login,
-  logout,
-  refreshSession,
-} from '../services/auth.service';
+import { hrContactEmail, login, logout, refreshSession } from '../services/auth.service';
 
 const router = Router();
 
@@ -42,8 +32,7 @@ router.post(
 router.post(
   '/login',
   asyncHandler(async (req, res) => {
-    const rememberMe = parseRememberMe(req.body?.rememberMe ?? req.body?.remember_me);
-    const result = await login(req.body?.email, req.body?.password, rememberMe);
+    const result = await login(req.body?.email, req.body?.password);
     if (!result.ok) {
       if (result.reason === 'inactive') {
         const hrEmail = await hrContactEmail();

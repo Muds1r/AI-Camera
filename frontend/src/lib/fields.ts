@@ -57,15 +57,15 @@ export function emailError(value: string, required: boolean, label = 'Email') {
   return '';
 }
 
-export function secondaryEmailError(value: string, companyMail: string, required: boolean) {
-  const message = emailError(value, required, 'Primary email');
+export function secondaryEmailError(value: string, loginEmail: string, required: boolean) {
+  const message = emailError(value, required, 'Secondary email');
   if (message) return message;
   if (
     value.trim() &&
-    companyMail.trim() &&
-    value.trim().toLowerCase() === companyMail.trim().toLowerCase()
+    loginEmail.trim() &&
+    value.trim().toLowerCase() === loginEmail.trim().toLowerCase()
   ) {
-    return 'Primary email must be different from the company email';
+    return 'Secondary email must be different from the account email';
   }
   return '';
 }

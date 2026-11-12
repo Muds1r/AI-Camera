@@ -86,14 +86,7 @@ export function HrWorkspaceDashboard({
           <Card
             title="Pending approvals"
             action={
-              <Link
-                href={
-                  hr.pendingProfile > 0 && hr.pendingMedical + hr.pendingLeave === 0
-                    ? '/hr/requests?tab=profile'
-                    : '/hr/requests'
-                }
-                className={linkMutedClass}
-              >
+              <Link href="/hr/requests" className={linkMutedClass}>
                 Review
               </Link>
             }
@@ -113,9 +106,7 @@ export function HrWorkspaceDashboard({
                     <span className="text-ink font-semibold tabular-nums">{hr.pendingLeave}</span>
                   </li>
                   <li className="flex justify-between gap-4">
-                    <Link href="/hr/requests?tab=profile" className={linkMutedClass}>
-                      Profile updates
-                    </Link>
+                    <span>Profile updates</span>
                     <span className="text-ink font-semibold tabular-nums">{hr.pendingProfile}</span>
                   </li>
                 </ul>

@@ -4,7 +4,6 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { APP_NAME } from '@/lib/brand';
 import { safeNextPath } from '@/lib/auth/guards';
-import { loadRememberedEmail, persistRememberedEmail } from '@/lib/auth/remember';
 import { loginErrorMessage } from '@/lib/api';
 import { PasswordField } from '@/components/password-field';
 import { buttonClass, cardClass, fieldClass, labelClass } from '@/components/page-frame';
@@ -17,16 +16,17 @@ type LoginErrorBody = {
   hr_email?: string | null;
 };
 
-const FORGOT_SUCCESS =
-  'If an account exists with a recovery email on file, a new password was sent there.';
+type ResetChannel = 'phone' | 'secondary_email';
 
 export function LoginForm() {
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<'sign-in' | 'forgot'>('sign-in');
-  const [email, setEmail] = useState(() => loadRememberedEmail());
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(() => Boolean(loadRememberedEmail()));
-  const [resetEmail, setResetEmail] = useState(() => loadRememberedEmail());
+  const [resetEmail, setResetEmail] = useState('');
+  const [channel, setChannel] = useState<ResetChannel>('secondary_email');
+  const [otp, setOtp] = useState('');
+  const [nextPassword, setNextPassword] = useState('');
   const [error, setError] = useState('');
   const [resetNote, setResetNote] = useState('');
   const [pending, setPending] = useState(false);
@@ -67,11 +67,6 @@ export function LoginForm() {
         setPending(false);
         return;
       }
-
-      // Only persist email after a successful login. Never store the password.
-      persistRememberedEmail(companyEmail, rememberMe);
-      setPassword('');
-
       notifySuccess('Welcome back', 'Redirecting to your workspace…');
       window.location.href = safeNextPath(searchParams.get('next'));
     } catch {
@@ -82,39 +77,11 @@ export function LoginForm() {
     }
   }
 
-  async function onForgot(event: FormEvent) {
+  function onForgot(event: FormEvent) {
     event.preventDefault();
-    setError('');
-    setResetNote('');
-    setPending(true);
-
-    try {
-      const response = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email: resetEmail }),
-      });
-      const data = (await response.json().catch(() => null)) as {
-        message?: string;
-        error?: string;
-      } | null;
-      if (!response.ok) {
-        const msg = data?.error || 'Could not request a password reset';
-        setError(msg);
-        notifyError('Reset failed', msg);
-        setPending(false);
-        return;
-      }
-      const msg = data?.message || FORGOT_SUCCESS;
-      setResetNote(msg);
-      notifySuccess('Check your recovery email', msg);
-    } catch {
-      const msg = 'Could not reach the server';
-      setError(msg);
-      notifyError('Connection error', msg);
-    } finally {
-      setPending(false);
-    }
+    setResetNote(
+      'Reset codes are not sent yet. The phone number and secondary email saved on the account are ready for this once mail and SMS are connected.',
+    );
   }
 
   return (
@@ -145,11 +112,8 @@ export function LoginForm() {
             </div>
           </div>
 
-          <label className={labelClass} htmlFor="login-email">
-            Company email
-          </label>
+          <label className={labelClass}>Email</label>
           <input
-            id="login-email"
             type="email"
             required
             autoComplete="username"
@@ -158,46 +122,26 @@ export function LoginForm() {
             className={`${fieldClass} mb-4`}
           />
 
-          <label className={labelClass} htmlFor="login-password">
-            Password
-          </label>
+          <label className={labelClass}>Password</label>
           <div className="mb-3">
             <PasswordField
-              id="login-password"
               required
               autoComplete="current-password"
               value={password}
               onChange={setPassword}
             />
           </div>
-
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <label className="flex cursor-pointer items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="border-line text-primary mt-0.5 h-4 w-4 rounded"
-                checked={rememberMe}
-                onChange={(event) => {
-                  const next = event.target.checked;
-                  setRememberMe(next);
-                  if (!next) persistRememberedEmail('', false);
-                }}
-              />
-              <span className="text-ink font-medium">Remember me</span>
-            </label>
-            <button
-              type="button"
-              className="text-mute hover:text-ink shrink-0 text-sm font-medium"
-              onClick={() => {
-                setError('');
-                setResetNote('');
-                setResetEmail(email);
-                setMode('forgot');
-              }}
-            >
-              Forgot password?
-            </button>
-          </div>
+          <button
+            type="button"
+            className="text-mute hover:text-ink mb-5 text-sm font-medium"
+            onClick={() => {
+              setError('');
+              setResetEmail(email);
+              setMode('forgot');
+            }}
+          >
+            Forgot password?
+          </button>
 
           {error ? (
             <p
@@ -217,29 +161,62 @@ export function LoginForm() {
           <div className="mb-6">
             <h1 className="text-ink text-lg font-semibold tracking-tight">Reset password</h1>
             <p className="text-mute mt-1 text-sm">
-              Enter your company email. A new password is sent only to the secondary (recovery)
-              email saved on your account.
+              A code will go to the phone number or secondary email on the account.
             </p>
           </div>
 
-          <label className={labelClass}>Company email</label>
+          <label className={labelClass}>Login email</label>
           <input
             type="email"
             required
             autoComplete="username"
             value={resetEmail}
             onChange={(event) => setResetEmail(event.target.value)}
-            className={`${fieldClass} mb-5`}
+            className={`${fieldClass} mb-4`}
           />
 
-          {error ? (
-            <p
-              className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
+          <fieldset className="mb-4">
+            <legend className={labelClass}>Send the code to</legend>
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="reset-channel"
+                checked={channel === 'secondary_email'}
+                onChange={() => setChannel('secondary_email')}
+              />
+              Secondary email
+            </label>
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input
+                type="radio"
+                name="reset-channel"
+                checked={channel === 'phone'}
+                onChange={() => setChannel('phone')}
+              />
+              Phone number
+            </label>
+          </fieldset>
+
+          <label className={labelClass}>Code</label>
+          <input
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={8}
+            placeholder="One-time code"
+            value={otp}
+            onChange={(event) => setOtp(event.target.value)}
+            className={`${fieldClass} mb-4`}
+          />
+
+          <label className={labelClass}>New password</label>
+          <div className="mb-5">
+            <PasswordField
+              autoComplete="new-password"
+              placeholder="New password"
+              value={nextPassword}
+              onChange={setNextPassword}
+            />
+          </div>
 
           {resetNote ? (
             <p className="border-line bg-surface text-ink mb-4 rounded-lg border px-3 py-2 text-sm">
@@ -247,15 +224,14 @@ export function LoginForm() {
             </p>
           ) : null}
 
-          <button type="submit" disabled={pending} className={`${buttonClass} w-full`}>
-            {pending ? 'Sending…' : 'Email new password'}
+          <button type="submit" className={`${buttonClass} w-full`}>
+            Reset password
           </button>
           <button
             type="button"
             className="text-mute hover:text-ink mt-4 w-full text-sm font-medium"
             onClick={() => {
               setResetNote('');
-              setError('');
               setMode('sign-in');
             }}
           >

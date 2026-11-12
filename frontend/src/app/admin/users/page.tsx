@@ -20,7 +20,6 @@ import {
   secondaryEmailError,
   withoutDigits,
 } from '@/lib/fields';
-import { DateField } from '@/components/date-field';
 import {
   buttonClass,
   DataPanel,
@@ -179,7 +178,7 @@ export default function AccountsPage() {
             required
             type="email"
             className={fieldClass}
-            placeholder="Enter company email"
+            placeholder="Email"
             maxLength={254}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
@@ -198,15 +197,17 @@ export default function AccountsPage() {
             required
             className={fieldClass}
             type="email"
-            placeholder="Enter primary email"
+            placeholder="Secondary email"
             maxLength={254}
             value={secondaryEmail}
             onChange={(event) => setSecondaryEmail(event.target.value)}
           />
-          <DateField
-            placeholder="Enter date of birth"
+          <input
+            className={fieldClass}
+            type="date"
+            aria-label="Date of birth"
             value={dateOfBirth}
-            onChange={setDateOfBirth}
+            onChange={(event) => setDateOfBirth(event.target.value)}
           />
           <select
             className={fieldClass}
