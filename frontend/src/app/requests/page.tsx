@@ -1,9 +1,20 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
-import { Badge, Notice, Stat } from '@/components/widgets';
+import { DateField } from '@/components/date-field';
+import {
+  PageFrame,
+  buttonClass,
+  fieldClass,
+  formPanelClass,
+  labelClass,
+  tabActiveClass,
+  tabBarClass,
+  tabIdleClass,
+} from '@/components/page-frame';
+import { EmptyState, ListRow, MetricStrip, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { documentFileError } from '@/lib/fields';
 
 type Tab = 'benefits' | 'leave';
 
@@ -134,7 +145,7 @@ export default function RequestsPage() {
       description="Medical, OPD, and leave requests for your own account."
     >
       <Notice error={error} message={message} />
-      <div className="mb-5 flex flex-wrap gap-2">
+      <div className={tabBarClass}>
         {(
           [
             ['benefits', 'Medical & OPD'],
@@ -145,7 +156,7 @@ export default function RequestsPage() {
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`rounded-md px-3 py-1.5 text-sm font-bold ${tab === id ? 'bg-teal text-white' : 'border-line bg-paper border'}`}
+            className={tab === id ? tabActiveClass : tabIdleClass}
           >
             {label}
           </button>
@@ -154,20 +165,16 @@ export default function RequestsPage() {
 
       {tab === 'leave' ? (
         <>
-          <div className="mb-4 grid gap-3 sm:grid-cols-3">
-            {balances.map((item) => (
-              <Stat
-                key={item.id}
-                label={item.leave_type.name}
-                value={item.allocated - item.used}
-                hint={`${item.used} used of ${item.allocated}`}
-              />
-            ))}
-          </div>
-          <form
-            onSubmit={submitLeave}
-            className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-          >
+          {balances.length > 0 ? (
+            <MetricStrip
+              items={balances.map((item) => ({
+                label: item.leave_type.name,
+                value: item.allocated - item.used,
+                hint: `${item.used} used of ${item.allocated}`,
+              }))}
+            />
+          ) : null}
+          <form onSubmit={submitLeave} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
             <select
               className={fieldClass}
               value={typeId}
@@ -179,24 +186,18 @@ export default function RequestsPage() {
                 </option>
               ))}
             </select>
-            <input
-              className={fieldClass}
-              type="date"
+            <DateField
               required
+              placeholder="Enter leave start date"
               value={start}
-              onChange={(event) => setStart(event.target.value)}
+              onChange={setStart}
             />
-            <input
-              className={fieldClass}
-              type="date"
-              required
-              value={end}
-              onChange={(event) => setEnd(event.target.value)}
-            />
+            <DateField required placeholder="Enter leave end date" value={end} onChange={setEnd} />
             <textarea
               className={`${fieldClass} min-h-20 md:col-span-2`}
               required
-              placeholder="Reason"
+              placeholder="Enter reason"
+              maxLength={2000}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
@@ -216,23 +217,22 @@ export default function RequestsPage() {
       ) : (
         <>
           {allowance ? (
-            <div className="mb-4 grid gap-3 sm:grid-cols-2">
-              <Stat
-                label="Medical remaining"
-                value={allowance.medical.remaining}
-                hint={`${allowance.medical.used} used of ${allowance.medical.limit}`}
-              />
-              <Stat
-                label="OPD remaining"
-                value={allowance.opd.remaining}
-                hint={`${allowance.opd.used} used of ${allowance.opd.limit}`}
-              />
-            </div>
+            <MetricStrip
+              items={[
+                {
+                  label: 'Medical remaining',
+                  value: allowance.medical.remaining,
+                  hint: `${allowance.medical.used} used of ${allowance.medical.limit}`,
+                },
+                {
+                  label: 'OPD remaining',
+                  value: allowance.opd.remaining,
+                  hint: `${allowance.opd.used} used of ${allowance.opd.limit}`,
+                },
+              ]}
+            />
           ) : null}
-          <form
-            onSubmit={submitClaim}
-            className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-          >
+          <form onSubmit={submitClaim} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
             <select
               className={fieldClass}
               value={kind}
@@ -247,6 +247,7 @@ export default function RequestsPage() {
               min="1"
               required
               placeholder="Amount"
+              max={10000000}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
             />
@@ -254,16 +255,32 @@ export default function RequestsPage() {
               className={`${fieldClass} min-h-20 md:col-span-2`}
               required
               placeholder="Reason"
+              maxLength={2000}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
             />
-            <label className="text-xs font-bold uppercase md:col-span-2">
+            <label className={`${labelClass} md:col-span-2`}>
               Supporting document
               <input
                 className={`${fieldClass} mt-1`}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+                accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf"
+                onChange={(event) => {
+                  const next = event.target.files?.[0] ?? null;
+                  if (!next) {
+                    setFile(null);
+                    return;
+                  }
+                  const message = documentFileError(next);
+                  if (message) {
+                    setError(message);
+                    event.target.value = '';
+                    setFile(null);
+                    return;
+                  }
+                  setError('');
+                  setFile(next);
+                }}
               />
             </label>
             <button className={buttonClass} type="submit">
@@ -290,26 +307,18 @@ function History({
 }: {
   rows: { id: string; title: string; detail: string; status: string; href?: string | null }[];
 }) {
-  if (rows.length === 0) return <p className="text-mute text-sm">No requests yet.</p>;
+  if (rows.length === 0) return <EmptyState>No requests yet.</EmptyState>;
   return (
-    <ul className="space-y-2">
+    <div className="space-y-2">
       {rows.map((row) => (
-        <li
+        <ListRow
           key={row.id}
-          className="border-line bg-paper flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm"
-        >
-          <div>
-            <p className="font-bold">{row.title}</p>
-            <p className="text-mute">{row.detail}</p>
-            {row.href ? (
-              <a className="text-teal font-bold" href={row.href}>
-                View document
-              </a>
-            ) : null}
-          </div>
-          <Badge status={row.status} />
-        </li>
+          title={row.title}
+          detail={row.detail}
+          status={row.status}
+          href={row.href}
+        />
       ))}
-    </ul>
+    </div>
   );
 }

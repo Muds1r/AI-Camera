@@ -6,7 +6,16 @@ import { isRole } from './permissions';
 export const ACCESS_COOKIE = 'access_token';
 export const REFRESH_COOKIE = 'refresh_token';
 export const ACCESS_TTL_SECONDS = 15 * 60;
-export const REFRESH_TTL_SECONDS = 7 * 24 * 60 * 60;
+/** Browser-session login: refresh lives until the tab/browser closes (DB cap). */
+export const SESSION_REFRESH_TTL_SECONDS = 12 * 60 * 60;
+/** Remember-me login: persistent refresh cookie and matching DB expiry. */
+export const REMEMBER_REFRESH_TTL_SECONDS = 30 * 24 * 60 * 60;
+/** @deprecated Prefer SESSION_REFRESH_TTL_SECONDS / REMEMBER_REFRESH_TTL_SECONDS */
+export const REFRESH_TTL_SECONDS = SESSION_REFRESH_TTL_SECONDS;
+
+export function refreshTtlSeconds(rememberMe: boolean): number {
+  return rememberMe ? REMEMBER_REFRESH_TTL_SECONDS : SESSION_REFRESH_TTL_SECONDS;
+}
 export const JWT_ISSUER = 'ai-camera';
 export const JWT_AUDIENCE = 'ai-camera-web';
 

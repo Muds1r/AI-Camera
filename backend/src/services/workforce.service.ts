@@ -560,15 +560,104 @@ export async function submitProfileRequest(userId: string, changes: unknown) {
     throw new HttpError(400, 'Changes are required');
   }
   const source = changes as Record<string, unknown>;
-  if ('email' in source) throw new HttpError(400, 'Email cannot be changed from a profile request');
-  const clean: Record<string, string | null> = {};
-  for (const field of PROFILE_FIELDS) {
-    if (source[field] === undefined) continue;
-    if (source[field] === null || source[field] === '') clean[field] = null;
-    else if (typeof source[field] === 'string') clean[field] = source[field].trim();
-    else throw new HttpError(400, `${field} is invalid`);
+  if ('email' in source || 'joined_on' in source || 'role' in source) {
+    throw new HttpError(400, 'That detail cannot be changed from a profile request');
   }
-  if (Object.keys(clean).length === 0) throw new HttpError(400, 'Nothing to request');
+
+  const pending = await prisma.profileUpdateRequest.findFirst({
+    where: { user_id: userId, status: MedicalRequestStatus.pending },
+    select: { id: true },
+  });
+  if (pending) {
+    throw new HttpError(
+      409,
+      'You already have a profile update waiting for HR. Wait for it to be reviewed, or ask HR to reject it first.',
+    );
+  }
+
+  const owner = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+  if (!owner) throw new HttpError(404, 'User not found');
+
+  const clean: Record<string, string | null> = {};
+
+  if ('full_name' in source) {
+    if (typeof source.full_name !== 'string') throw new HttpError(400, 'Full name is invalid');
+    clean.full_name = assertPersonName(source.full_name, 'Full name');
+  }
+  if ('phone' in source) {
+    clean.phone = requiredText(optionalPhone(source.phone) ?? null, 'Phone number');
+  }
+  if ('secondary_email' in source) {
+    const secondaryEmail =
+      source.secondary_email === null || source.secondary_email === ''
+        ? null
+        : typeof source.secondary_email === 'string'
+          ? assertEmail(source.secondary_email)
+          : (() => {
+              throw new HttpError(400, 'Primary email is invalid');
+            })();
+    if (secondaryEmail && secondaryEmail === owner.email) {
+      throw new HttpError(400, 'Primary email must be different from the company email');
+    }
+    clean.secondary_email = requiredText(secondaryEmail, 'Primary email');
+  }
+  if ('date_of_birth' in source) {
+    const dateOfBirth = optionalDateOfBirth(source.date_of_birth);
+    clean.date_of_birth = requiredText(
+      dateOfBirth ? dateOfBirth.toISOString().slice(0, 10) : null,
+      'Date of birth',
+    );
+  }
+  if ('gender' in source) {
+    clean.gender = requiredText(optionalChoice(source.gender, 'Gender', GENDERS) ?? null, 'Gender');
+  }
+  if ('id_card_number' in source) {
+    clean.id_card_number = requiredText(
+      optionalIdCard(source.id_card_number) ?? null,
+      'ID card number',
+    );
+  }
+  if ('address' in source) {
+    clean.address = requiredText(optionalAddress(source.address) ?? null, 'Address');
+  }
+  if ('emergency_contact_name' in source) {
+    clean.emergency_contact_name = requiredText(
+      optionalPersonName(source.emergency_contact_name, 'Emergency contact') ?? null,
+      'Emergency contact',
+    );
+  }
+  if ('emergency_contact_phone' in source) {
+    clean.emergency_contact_phone = requiredText(
+      optionalPhone(source.emergency_contact_phone, 'Emergency phone') ?? null,
+      'Emergency phone',
+    );
+  }
+  if ('blood_group' in source) {
+    clean.blood_group = optionalChoice(source.blood_group, 'Blood group', BLOOD_GROUPS) ?? null;
+  }
+  if ('department' in source) {
+    clean.department = optionalLabel(source.department, 'Department') ?? null;
+  }
+  if ('designation' in source) {
+    clean.designation = optionalLabel(source.designation, 'Designation') ?? null;
+  }
+  if ('info' in source) {
+    clean.info = optionalNotes(source.info) ?? null;
+  }
+  if (source.avatar_url !== undefined && source.avatar_url !== null && source.avatar_url !== '') {
+    if (typeof source.avatar_url !== 'string' || !AVATAR_PATH.test(source.avatar_url)) {
+      throw new HttpError(400, 'Picture is invalid');
+    }
+    clean.avatar_url = source.avatar_url;
+  }
+
+  if (Object.keys(clean).length === 0) {
+    throw new HttpError(400, 'No changes to submit');
+  }
+
   const request = await prisma.profileUpdateRequest.create({
     data: { user_id: userId, changes: clean as Prisma.InputJsonValue },
   });
@@ -669,12 +758,29 @@ export async function updateEmployment(
     else throw new HttpError(400, `${label} is invalid`);
   };
   if (input.full_name !== undefined) {
-    if (
-      typeof input.full_name !== 'string' ||
-      input.full_name.trim().length < 1 ||
-      input.full_name.trim().length > 120
-    ) {
-      throw new HttpError(400, 'Name is invalid');
+    if (typeof input.full_name !== 'string') throw new HttpError(400, 'Name is invalid');
+    data.full_name = assertPersonName(input.full_name, 'Full name');
+  }
+  assign('phone', optionalPhone(input.phone));
+  if (input.email !== undefined) {
+    if (actor.role !== Role.super_admin) {
+      throw new HttpError(403, 'Only a Super Admin can change an email address');
+    }
+    if (typeof input.email !== 'string') throw new HttpError(400, 'Email is invalid');
+    data.email = assertEmail(input.email);
+  }
+  const accountEmail = typeof data.email === 'string' ? data.email : target.email;
+  if (input.secondary_email !== undefined) {
+    if (input.secondary_email === null || input.secondary_email === '') {
+      data.secondary_email = null;
+    } else if (typeof input.secondary_email === 'string') {
+      const secondaryEmail = assertEmail(input.secondary_email);
+      if (secondaryEmail === accountEmail) {
+        throw new HttpError(400, 'Primary email must be different from the company email');
+      }
+      data.secondary_email = secondaryEmail;
+    } else {
+      throw new HttpError(400, 'Primary email is invalid');
     }
     data.full_name = input.full_name.trim();
   }

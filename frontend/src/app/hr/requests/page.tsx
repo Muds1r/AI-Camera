@@ -1,11 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { PageFrame, fieldClass } from '@/components/page-frame';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { DateField } from '@/components/date-field';
+import {
+  PageFrame,
+  buttonDangerClass,
+  buttonSuccessClass,
+  cardClass,
+  fieldClass,
+  tabActiveClass,
+  tabBarClass,
+  tabIdleClass,
+  linkMutedClass,
+} from '@/components/page-frame';
 import { Badge, ConfirmDialog, Notice } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 
 type Tab = 'medical' | 'opd' | 'leave' | 'profile';
+
+function parseTab(value: string | null): Tab {
+  if (value === 'opd' || value === 'leave' || value === 'profile' || value === 'medical') {
+    return value;
+  }
+  return 'medical';
+}
 
 interface Row {
   id: string;
@@ -16,6 +35,35 @@ interface Row {
   review_note?: string | null;
 }
 
+const PROFILE_LABELS: Record<string, string> = {
+  full_name: 'Name',
+  phone: 'Phone',
+  secondary_email: 'Primary email',
+  date_of_birth: 'Date of birth',
+  gender: 'Gender',
+  blood_group: 'Blood group',
+  id_card_number: 'ID card',
+  address: 'Address',
+  emergency_contact_name: 'Emergency contact',
+  emergency_contact_phone: 'Emergency phone',
+  department: 'Department',
+  designation: 'Designation',
+  info: 'Notes',
+  avatar_url: 'Picture',
+};
+
+function profileChangeDetail(changes: Record<string, string | null>) {
+  return Object.entries(changes)
+    .map(([key, value]) => {
+      const label = PROFILE_LABELS[key] ?? key.replaceAll('_', ' ');
+      if (key === 'avatar_url') return `${label}: updated`;
+      if (!value) return `${label}: cleared`;
+      if (key === 'gender') return `${label}: ${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+      return `${label}: ${value}`;
+    })
+    .join(' · ');
+}
+
 const TABS: { id: Tab; label: string }[] = [
   { id: 'medical', label: 'Medical' },
   { id: 'opd', label: 'OPD' },
@@ -24,10 +72,20 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function ApprovalsPage() {
-  const [tab, setTab] = useState<Tab>('medical');
+  return (
+    <Suspense fallback={<PageFrame title="Requests & Approvals" />}>
+      <ApprovalsPageContent />
+    </Suspense>
+  );
+}
+
+function ApprovalsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = parseTab(searchParams.get('tab'));
   const [rows, setRows] = useState<Row[]>([]);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('pending');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [error, setError] = useState('');
@@ -107,9 +165,7 @@ export default function ApprovalsPage() {
           id: item.id,
           status: item.status,
           title: item.requester.full_name,
-          detail: Object.entries(item.changes)
-            .map(([key, value]) => `${key}: ${value ?? 'cleared'}`)
-            .join(', '),
+          detail: profileChangeDetail(item.changes),
           review_note: item.review_note,
         })),
       ),
@@ -117,11 +173,11 @@ export default function ApprovalsPage() {
   }
 
   useEffect(() => {
-    load('medical', { query: '', status: '', from: '', to: '' }).catch((err: unknown) =>
+    load(tab, { query: '', status: 'pending', from: '', to: '' }).catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab]);
 
   async function review() {
     if (!pending) return;
@@ -148,17 +204,24 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <PageFrame title="Requests & Approvals" description="You cannot approve your own requests.">
+    <PageFrame
+      title="Requests & Approvals"
+      description="Review medical, leave, and profile updates. You cannot approve your own."
+    >
       <Notice error={error} message={message} />
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div className={tabBarClass}>
         {TABS.map((item) => (
           <button
             key={item.id}
             type="button"
-            className={`rounded-md px-3 py-1.5 text-sm font-bold ${tab === item.id ? 'bg-teal text-white' : 'border-line bg-paper border'}`}
+            className={tab === item.id ? tabActiveClass : tabIdleClass}
             onClick={() => {
-              setTab(item.id);
-              load(item.id).catch(() => undefined);
+              setError('');
+              setQuery('');
+              setStatus('pending');
+              setFrom('');
+              setTo('');
+              router.replace(`/hr/requests?tab=${item.id}`);
             }}
           >
             {item.label}
@@ -188,22 +251,22 @@ export default function ApprovalsPage() {
           <option value="approved">Approved</option>
           <option value="rejected">Rejected</option>
         </select>
-        <input
-          className={`${fieldClass} max-w-40`}
-          type="date"
+        <DateField
+          className="max-w-40"
+          placeholder="From date"
           value={from}
-          onChange={(event) => {
-            setFrom(event.target.value);
-            load(tab, { query, status, from: event.target.value, to }).catch(() => undefined);
+          onChange={(value) => {
+            setFrom(value);
+            load(tab, { query, status, from: value, to }).catch(() => undefined);
           }}
         />
-        <input
-          className={`${fieldClass} max-w-40`}
-          type="date"
+        <DateField
+          className="max-w-40"
+          placeholder="To date"
           value={to}
-          onChange={(event) => {
-            setTo(event.target.value);
-            load(tab, { query, status, from, to: event.target.value }).catch(() => undefined);
+          onChange={(value) => {
+            setTo(value);
+            load(tab, { query, status, from, to: value }).catch(() => undefined);
           }}
         />
       </div>
@@ -212,15 +275,15 @@ export default function ApprovalsPage() {
       ) : null}
       <ul className="space-y-2">
         {rows.map((row) => (
-          <li key={row.id} className="border-line bg-paper rounded-xl border p-4 text-sm shadow-sm">
+          <li key={row.id} className={`${cardClass} p-4 text-sm`}>
             <div className="flex items-center justify-between gap-3">
-              <p className="font-extrabold">{row.title}</p>
+              <p className="font-medium">{row.title}</p>
               <Badge status={row.status} />
             </div>
             <p className="text-mute mt-1">{row.detail}</p>
             {row.review_note ? <p className="mt-1 text-sm">Note: {row.review_note}</p> : null}
             {row.document_url ? (
-              <a className="text-teal mt-1 inline-block font-bold" href={row.document_url}>
+              <a className={`${linkMutedClass} mt-1 inline-block`} href={row.document_url}>
                 View document
               </a>
             ) : null}
@@ -228,7 +291,7 @@ export default function ApprovalsPage() {
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  className="bg-success rounded-md px-3 py-1.5 text-xs font-bold text-white"
+                  className={`${buttonSuccessClass} px-3 py-1.5 text-xs`}
                   onClick={() => {
                     setNote('');
                     setPending({ id: row.id, status: 'approved' });
@@ -238,7 +301,7 @@ export default function ApprovalsPage() {
                 </button>
                 <button
                   type="button"
-                  className="bg-danger rounded-md px-3 py-1.5 text-xs font-bold text-white"
+                  className={`${buttonDangerClass} px-3 py-1.5 text-xs`}
                   onClick={() => {
                     setNote('');
                     setPending({ id: row.id, status: 'rejected' });
@@ -256,8 +319,10 @@ export default function ApprovalsPage() {
         title={pending?.status === 'rejected' ? 'Reject this request?' : 'Approve this request?'}
         detail={
           pending?.status === 'rejected'
-            ? 'A reason is required. The employee keeps their current balance and profile.'
-            : 'Approved medical and leave requests update the remaining balances.'
+            ? 'A reason is required. Their balance and profile stay as they are.'
+            : tab === 'profile'
+              ? 'Approving applies the requested personal details to their account.'
+              : 'Approved medical and leave requests update the remaining balances.'
         }
         confirmLabel={pending?.status === 'rejected' ? 'Reject' : 'Approve'}
         tone={pending?.status === 'rejected' ? 'danger' : 'teal'}

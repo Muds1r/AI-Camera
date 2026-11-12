@@ -1,22 +1,41 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
-import { PageFrame, buttonClass, fieldClass } from '@/components/page-frame';
+import {
+  PageFrame,
+  buttonClass,
+  fieldClass,
+  formPanelClass,
+  cardClass,
+} from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
-import { ConfirmDialog, Notice } from '@/components/widgets';
+import { Notice, Switch } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import type { SessionUser } from '@/lib/auth/types';
+import {
+  digitsOnly,
+  emailError,
+  firstError,
+  labelError,
+  nameError,
+  passwordError,
+  phoneError,
+  secondaryEmailError,
+  withoutDigits,
+} from '@/lib/fields';
 
 export default function HrAccountsPage() {
   const [users, setUsers] = useState<SessionUser[]>([]);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [accountPhone, setAccountPhone] = useState('');
+  const [accountSecondaryEmail, setAccountSecondaryEmail] = useState('');
   const [password, setPassword] = useState('');
   const [selected, setSelected] = useState<SessionUser | null>(null);
   const [phone, setPhone] = useState('');
+  const [secondaryEmail, setSecondaryEmail] = useState('');
   const [department, setDepartment] = useState('');
   const [designation, setDesignation] = useState('');
-  const [confirming, setConfirming] = useState<SessionUser | null>(null);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -33,14 +52,34 @@ export default function HrAccountsPage() {
   async function create(event: FormEvent) {
     event.preventDefault();
     setError('');
+    const problem = firstError({
+      full_name: nameError(fullName),
+      email: emailError(email, true),
+      phone: phoneError(accountPhone, true),
+      secondary_email: secondaryEmailError(accountSecondaryEmail, email, true),
+      password: passwordError(password, true),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     try {
       await apiJson('/api/users', {
         method: 'POST',
-        body: JSON.stringify({ full_name: fullName, email, password, role: 'hr' }),
+        body: JSON.stringify({
+          full_name: fullName,
+          email,
+          phone: accountPhone,
+          secondary_email: accountSecondaryEmail,
+          password,
+          role: 'hr',
+        }),
       });
       setMessage('HR account created.');
       setFullName('');
       setEmail('');
+      setAccountPhone('');
+      setAccountSecondaryEmail('');
       setPassword('');
       await load();
     } catch (err) {
@@ -48,26 +87,43 @@ export default function HrAccountsPage() {
     }
   }
 
-  async function toggle(person: SessionUser) {
-    await apiJson(`/api/users/${person.id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ is_active: !person.is_active }),
-    });
-    setConfirming(null);
-    setMessage(person.is_active ? 'HR account deactivated.' : 'HR account activated.');
-    await load();
+  async function setActive(person: SessionUser, isActive: boolean) {
+    if (person.is_active === isActive) return;
+    setError('');
+    try {
+      await apiJson(`/api/users/${person.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ is_active: isActive }),
+      });
+      setMessage(isActive ? 'HR account activated.' : 'HR account deactivated.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update status');
+    }
   }
 
   async function saveHr(event: FormEvent) {
     event.preventDefault();
     if (!selected) return;
     setError('');
+    const problem = firstError({
+      full_name: nameError(selected.full_name),
+      phone: phoneError(phone, true),
+      secondary_email: secondaryEmailError(secondaryEmail, selected.email, true),
+      department: labelError(department, 'Department'),
+      designation: labelError(designation, 'Designation'),
+    });
+    if (problem) {
+      setError(problem);
+      return;
+    }
     try {
       await apiJson(`/api/users/${selected.id}`, {
         method: 'PATCH',
         body: JSON.stringify({
           full_name: selected.full_name,
           phone,
+          secondary_email: secondaryEmail,
           department,
           designation,
         }),
@@ -80,26 +136,43 @@ export default function HrAccountsPage() {
   }
 
   return (
-    <PageFrame title="HR accounts" description="Only a Super Admin can create or deactivate HR.">
+    <PageFrame title="HR accounts" description="Create HR accounts and turn them on or off.">
       <Notice error={error} message={message} />
-      <form
-        onSubmit={create}
-        className="border-line bg-paper mb-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-      >
+      <form onSubmit={create} className={`${formPanelClass} mb-6 md:grid-cols-2`}>
         <input
           required
           className={fieldClass}
           placeholder="Full name"
+          maxLength={80}
           value={fullName}
-          onChange={(event) => setFullName(event.target.value)}
+          onChange={(event) => setFullName(withoutDigits(event.target.value))}
         />
         <input
           required
           type="email"
           className={fieldClass}
-          placeholder="Email"
+          placeholder="Enter company email"
+          maxLength={254}
           value={email}
           onChange={(event) => setEmail(event.target.value)}
+        />
+        <input
+          required
+          type="tel"
+          inputMode="numeric"
+          className={fieldClass}
+          placeholder="Phone, 10–12 digits"
+          maxLength={12}
+          value={accountPhone}
+          onChange={(event) => setAccountPhone(digitsOnly(event.target.value, 12))}
+        />
+        <input
+          required
+          type="email"
+          className={fieldClass}
+          placeholder="Enter primary email"
+          value={accountSecondaryEmail}
+          onChange={(event) => setAccountSecondaryEmail(event.target.value)}
         />
         <PasswordField
           required
@@ -115,7 +188,7 @@ export default function HrAccountsPage() {
         {users.map((person) => (
           <li
             key={person.id}
-            className="border-line bg-paper flex items-center justify-between rounded-xl border px-4 py-3 text-sm"
+            className={`${cardClass} flex items-center justify-between px-4 py-3 text-sm`}
           >
             <button
               type="button"
@@ -123,6 +196,7 @@ export default function HrAccountsPage() {
               onClick={() => {
                 setSelected(person);
                 setPhone(person.phone || '');
+                setSecondaryEmail(person.secondary_email || '');
                 setDepartment(person.department || '');
                 setDesignation(person.designation || '');
               }}
@@ -130,28 +204,45 @@ export default function HrAccountsPage() {
               {person.full_name}
               <span className="text-mute block font-medium">{person.email}</span>
             </button>
-            <button type="button" className="font-bold" onClick={() => setConfirming(person)}>
-              {person.is_active ? 'Deactivate' : 'Activate'}
-            </button>
+            <div className="flex items-center gap-2.5">
+              <Switch
+                checked={person.is_active}
+                onChange={(next) => setActive(person, next).catch(() => undefined)}
+                label={`${person.full_name} active`}
+              />
+              <span className="text-mute text-xs font-medium">
+                {person.is_active ? 'Active' : 'Inactive'}
+              </span>
+            </div>
           </li>
         ))}
       </ul>
       {selected ? (
-        <form
-          onSubmit={saveHr}
-          className="border-line bg-paper mt-6 grid gap-3 rounded-xl border p-5 shadow-sm md:grid-cols-2"
-        >
-          <h2 className="font-extrabold md:col-span-2">Update {selected.email}</h2>
+        <form onSubmit={saveHr} className={`${formPanelClass} mt-6 md:grid-cols-2`}>
+          <h2 className="text-ink text-sm font-medium md:col-span-2">Update {selected.email}</h2>
           <input
             className={fieldClass}
+            maxLength={80}
             value={selected.full_name}
-            onChange={(event) => setSelected({ ...selected, full_name: event.target.value })}
+            onChange={(event) =>
+              setSelected({ ...selected, full_name: withoutDigits(event.target.value) })
+            }
           />
           <input
             className={fieldClass}
-            placeholder="Phone"
+            type="tel"
+            inputMode="numeric"
+            placeholder="Phone, 10–12 digits"
+            maxLength={12}
             value={phone}
-            onChange={(event) => setPhone(event.target.value)}
+            onChange={(event) => setPhone(digitsOnly(event.target.value, 12))}
+          />
+          <input
+            className={fieldClass}
+            type="email"
+            placeholder="Enter primary email"
+            value={secondaryEmail}
+            onChange={(event) => setSecondaryEmail(event.target.value)}
           />
           <input
             className={fieldClass}
@@ -170,16 +261,6 @@ export default function HrAccountsPage() {
           </button>
         </form>
       ) : null}
-      <ConfirmDialog
-        open={Boolean(confirming)}
-        title={confirming?.is_active ? 'Deactivate this HR account?' : 'Activate this HR account?'}
-        detail={confirming?.full_name}
-        confirmLabel={confirming?.is_active ? 'Deactivate' : 'Activate'}
-        onClose={() => setConfirming(null)}
-        onConfirm={() => {
-          if (confirming) toggle(confirming).catch(() => undefined);
-        }}
-      />
     </PageFrame>
   );
 }

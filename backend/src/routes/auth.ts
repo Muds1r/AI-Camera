@@ -1,11 +1,21 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { REFRESH_COOKIE, ACCESS_TTL_SECONDS } from '../lib/auth/tokens';
-import { clearAuthCookies, readCookie, setAuthCookies } from '../lib/auth/cookies';
+import { clearAuthCookies, parseRememberMe, readCookie, setAuthCookies } from '../lib/auth/cookies';
 import { publicUserSelect } from '../lib/auth/users';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
 import { requireAuth } from '../middleware/auth';
-import { login, logout, refreshSession } from '../services/auth.service';
+import {
+  isForgotPasswordRateLimited,
+  FORGOT_PASSWORD_SUCCESS_MESSAGE,
+} from '../lib/auth/forgot-password-rate-limit';
+import {
+  forgotPassword,
+  hrContactEmail,
+  login,
+  logout,
+  refreshSession,
+} from '../services/auth.service';
 
 const router = Router();
 
@@ -16,16 +26,41 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
 }
 
 router.post(
+  '/forgot-password',
+  asyncHandler(async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const clientKey = `${req.ip ?? 'unknown'}:${email || 'blank'}`;
+    if (isForgotPasswordRateLimited(clientKey)) {
+      res.json({ message: FORGOT_PASSWORD_SUCCESS_MESSAGE });
+      return;
+    }
+    const result = await forgotPassword(req.body?.email);
+    res.json(result);
+  }),
+);
+
+router.post(
   '/login',
   asyncHandler(async (req, res) => {
-    const result = await login(req.body?.email, req.body?.password);
-    if (!result.ok) throw new HttpError(401, 'Invalid email or password');
+    const rememberMe = parseRememberMe(req.body?.rememberMe ?? req.body?.remember_me);
+    const result = await login(req.body?.email, req.body?.password, rememberMe);
+    if (!result.ok) {
+      if (result.reason === 'inactive') {
+        const hrEmail = await hrContactEmail();
+        throw new HttpError(403, 'Your account has been deactivated.', {
+          code: 'account_inactive',
+          hr_email: hrEmail,
+        });
+      }
+      throw new HttpError(401, 'Invalid email or password');
+    }
 
-    setAuthCookies(res, result.accessToken, result.refreshToken);
+    setAuthCookies(res, result.accessToken, result.refreshToken, result.rememberMe);
     res.json({
       user: result.user,
       accessToken: result.accessToken,
       expiresIn: ACCESS_TTL_SECONDS,
+      rememberMe: result.rememberMe,
     });
   }),
 );
@@ -39,11 +74,12 @@ router.post(
       throw new HttpError(401, 'Invalid session');
     }
 
-    setAuthCookies(res, result.accessToken, result.refreshToken);
+    setAuthCookies(res, result.accessToken, result.refreshToken, result.rememberMe);
     res.json({
       user: result.user,
       accessToken: result.accessToken,
       expiresIn: ACCESS_TTL_SECONDS,
+      rememberMe: result.rememberMe,
     });
   }),
 );

@@ -4,6 +4,20 @@ import { HttpError } from '../http';
 import { hashPassword, verifyPassword } from './passwords';
 import { canAssignRole, isRole } from './permissions';
 import { AuthUser } from './session';
+import {
+  BLOOD_GROUPS,
+  GENDERS,
+  assertPersonName,
+  optionalAddress,
+  optionalChoice,
+  optionalDateOfBirth,
+  optionalIdCard,
+  optionalJoinedOn,
+  optionalLabel,
+  optionalNotes,
+  optionalPersonName,
+  optionalPhone,
+} from '../fields';
 
 export const publicUserSelect = {
   id: true,
@@ -11,8 +25,15 @@ export const publicUserSelect = {
   full_name: true,
   role: true,
   phone: true,
+  secondary_email: true,
   address: true,
   id_card_number: true,
+  date_of_birth: true,
+  gender: true,
+  blood_group: true,
+  emergency_contact_name: true,
+  emergency_contact_phone: true,
+  joined_on: true,
   info: true,
   avatar_url: true,
   department: true,
@@ -40,6 +61,9 @@ export function assertPassword(password: string): void {
   if (password.length < 8 || password.length > 72) {
     throw new HttpError(400, 'Password must be between 8 and 72 characters');
   }
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    throw new HttpError(400, 'Password must include a letter and a number');
+  }
 }
 
 export function assertEmail(email: string): string {
@@ -48,14 +72,6 @@ export function assertEmail(email: string): string {
     throw new HttpError(400, 'A valid email is required');
   }
   return normalized;
-}
-
-function assertName(name: string): string {
-  const trimmed = name.trim();
-  if (trimmed.length < 1 || trimmed.length > 120) {
-    throw new HttpError(400, 'Name must be between 1 and 120 characters');
-  }
-  return trimmed;
 }
 
 function optionalText(value: unknown, label: string, max: number): string | null | undefined {
@@ -71,19 +87,16 @@ function optionalText(value: unknown, label: string, max: number): string | null
 function optionalNumber(value: unknown, label: string): number | undefined {
   if (value === undefined || value === null || value === '') return undefined;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new HttpError(400, `${label} must be zero or greater`);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100_000_000) {
+    throw new HttpError(400, `${label} must be between 0 and 100,000,000`);
   }
   return parsed;
 }
 
-function optionalIdCard(value: unknown): string | null | undefined {
-  const text = optionalText(value, 'ID card number', 30);
+function optionalEmail(value: unknown, label: string): string | null | undefined {
+  const text = optionalText(value, label, 254);
   if (text === undefined || text === null) return text;
-  if (!/^[A-Za-z0-9-]{5,30}$/.test(text)) {
-    throw new HttpError(400, 'ID card number must be 5 to 30 letters, numbers, or dashes');
-  }
-  return text.toUpperCase();
+  return assertEmail(text);
 }
 
 function uniqueConflict(err: Prisma.PrismaClientKnownRequestError): HttpError {
@@ -103,8 +116,15 @@ export async function createAccount(
     full_name?: unknown;
     role?: unknown;
     phone?: unknown;
+    secondary_email?: unknown;
     address?: unknown;
     id_card_number?: unknown;
+    date_of_birth?: unknown;
+    gender?: unknown;
+    blood_group?: unknown;
+    emergency_contact_name?: unknown;
+    emergency_contact_phone?: unknown;
+    joined_on?: unknown;
     info?: unknown;
     department?: unknown;
     designation?: unknown;
@@ -129,7 +149,22 @@ export async function createAccount(
 
   const email = assertEmail(input.email);
   assertPassword(input.password);
-  const fullName = assertName(input.full_name);
+  const fullName = assertPersonName(input.full_name, 'Full name');
+  const phone = optionalPhone(input.phone);
+  const secondaryEmail = optionalEmail(input.secondary_email, 'Primary email') ?? null;
+  if (!phone) throw new HttpError(400, 'Phone number is required');
+  if (!secondaryEmail) throw new HttpError(400, 'Primary email is required');
+  if (secondaryEmail === email) {
+    throw new HttpError(400, 'Primary email must be different from the company email');
+  }
+  const dateOfBirth = optionalDateOfBirth(input.date_of_birth) ?? null;
+  const gender = optionalChoice(input.gender, 'Gender', GENDERS) ?? null;
+  const idCard = optionalIdCard(input.id_card_number) ?? null;
+  if (role === Role.employee) {
+    if (!dateOfBirth) throw new HttpError(400, 'Date of birth is required');
+    if (!gender) throw new HttpError(400, 'Gender is required');
+    if (!idCard) throw new HttpError(400, 'ID card number is required');
+  }
 
   try {
     return await prisma.user.create({
@@ -138,12 +173,21 @@ export async function createAccount(
         password_hash: await hashPassword(input.password),
         full_name: fullName,
         role,
-        phone: optionalText(input.phone, 'Phone', 30) ?? null,
-        address: optionalText(input.address, 'Address', 300) ?? null,
-        id_card_number: optionalIdCard(input.id_card_number) ?? null,
-        info: optionalText(input.info, 'Info', 2000) ?? null,
-        department: optionalText(input.department, 'Department', 80) ?? null,
-        designation: optionalText(input.designation, 'Designation', 80) ?? null,
+        phone,
+        secondary_email: secondaryEmail,
+        address: optionalAddress(input.address) ?? null,
+        id_card_number: idCard,
+        date_of_birth: dateOfBirth,
+        gender,
+        blood_group: optionalChoice(input.blood_group, 'Blood group', BLOOD_GROUPS) ?? null,
+        emergency_contact_name:
+          optionalPersonName(input.emergency_contact_name, 'Emergency contact') ?? null,
+        emergency_contact_phone:
+          optionalPhone(input.emergency_contact_phone, 'Emergency phone') ?? null,
+        joined_on: optionalJoinedOn(input.joined_on) ?? null,
+        info: optionalNotes(input.info) ?? null,
+        department: optionalLabel(input.department, 'Department') ?? null,
+        designation: optionalLabel(input.designation, 'Designation') ?? null,
         salary_basic: optionalNumber(input.salary_basic, 'Basic salary') ?? 0,
         salary_allowance: optionalNumber(input.salary_allowance, 'Allowance') ?? 0,
         salary_deduction: optionalNumber(input.salary_deduction, 'Deduction') ?? 0,
@@ -174,8 +218,16 @@ export async function updateOwnProfile(
   input: {
     full_name?: unknown;
     phone?: unknown;
+    secondary_email?: unknown;
     address?: unknown;
     id_card_number?: unknown;
+    date_of_birth?: unknown;
+    gender?: unknown;
+    blood_group?: unknown;
+    emergency_contact_name?: unknown;
+    emergency_contact_phone?: unknown;
+    department?: unknown;
+    designation?: unknown;
     info?: unknown;
     current_password?: unknown;
     new_password?: unknown;
@@ -185,29 +237,65 @@ export async function updateOwnProfile(
   const personalFields = [
     input.full_name,
     input.phone,
+    input.secondary_email,
     input.address,
     input.id_card_number,
+    input.date_of_birth,
+    input.gender,
+    input.blood_group,
+    input.emergency_contact_name,
+    input.emergency_contact_phone,
+    input.department,
+    input.designation,
     input.info,
   ];
-  if (actor.role !== Role.super_admin && personalFields.some((value) => value !== undefined)) {
+  const savesOwnProfile = actor.role === Role.super_admin || actor.role === Role.hr;
+  if (!savesOwnProfile && personalFields.some((value) => value !== undefined)) {
     throw new HttpError(400, 'Submit a profile update request to change personal details');
   }
 
   if (input.full_name !== undefined) {
     if (typeof input.full_name !== 'string') throw new HttpError(400, 'Name is invalid');
-    data.full_name = assertName(input.full_name);
+    data.full_name = assertPersonName(input.full_name, 'Full name');
   }
 
-  const phone = optionalText(input.phone, 'Phone', 30);
+  const phone = optionalPhone(input.phone);
   if (phone !== undefined) data.phone = phone;
 
-  const address = optionalText(input.address, 'Address', 300);
+  const secondaryEmail = optionalEmail(input.secondary_email, 'Primary email');
+  if (secondaryEmail && secondaryEmail === actor.email) {
+    throw new HttpError(400, 'Primary email must be different from the company email');
+  }
+  if (secondaryEmail !== undefined) data.secondary_email = secondaryEmail;
+
+  const address = optionalAddress(input.address);
   if (address !== undefined) data.address = address;
 
   const idCard = optionalIdCard(input.id_card_number);
   if (idCard !== undefined) data.id_card_number = idCard;
 
-  const info = optionalText(input.info, 'Info', 2000);
+  const dateOfBirth = optionalDateOfBirth(input.date_of_birth);
+  if (dateOfBirth !== undefined) data.date_of_birth = dateOfBirth;
+
+  const gender = optionalChoice(input.gender, 'Gender', GENDERS);
+  if (gender !== undefined) data.gender = gender;
+
+  const bloodGroup = optionalChoice(input.blood_group, 'Blood group', BLOOD_GROUPS);
+  if (bloodGroup !== undefined) data.blood_group = bloodGroup;
+
+  const emergencyName = optionalPersonName(input.emergency_contact_name, 'Emergency contact');
+  if (emergencyName !== undefined) data.emergency_contact_name = emergencyName;
+
+  const emergencyPhone = optionalPhone(input.emergency_contact_phone, 'Emergency phone');
+  if (emergencyPhone !== undefined) data.emergency_contact_phone = emergencyPhone;
+
+  const department = optionalLabel(input.department, 'Department');
+  if (department !== undefined) data.department = department;
+
+  const designation = optionalLabel(input.designation, 'Designation');
+  if (designation !== undefined) data.designation = designation;
+
+  const info = optionalNotes(input.info);
   if (info !== undefined) data.info = info;
 
   let passwordChanged = false;
@@ -280,8 +368,15 @@ export function toPublicUser(user: User): PublicUser {
     full_name: user.full_name,
     role: user.role,
     phone: user.phone,
+    secondary_email: user.secondary_email,
     address: user.address,
     id_card_number: user.id_card_number,
+    date_of_birth: user.date_of_birth,
+    gender: user.gender,
+    blood_group: user.blood_group,
+    emergency_contact_name: user.emergency_contact_name,
+    emergency_contact_phone: user.emergency_contact_phone,
+    joined_on: user.joined_on,
     info: user.info,
     avatar_url: user.avatar_url,
     department: user.department,
