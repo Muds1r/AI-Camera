@@ -4,12 +4,14 @@ import { useState } from 'react';
 import { fieldClass } from './page-frame';
 
 export function PasswordField({
+  id,
   value,
   onChange,
   placeholder,
   autoComplete,
   required,
 }: {
+  id?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -21,6 +23,7 @@ export function PasswordField({
   return (
     <div className="relative">
       <input
+        id={id}
         type={visible ? 'text' : 'password'}
         required={required}
         autoComplete={autoComplete}

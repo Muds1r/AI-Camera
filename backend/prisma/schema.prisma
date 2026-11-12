@@ -160,6 +160,7 @@ model RefreshToken {
   token_hash  String    @unique
   family_id   String    @db.Uuid
   expires_at  DateTime  @db.Timestamptz(6)
+  remember_me Boolean   @default(false)
   revoked_at  DateTime? @db.Timestamptz(6)
   replaced_by String?   @db.Uuid
   created_at  DateTime  @default(now()) @db.Timestamptz(6)

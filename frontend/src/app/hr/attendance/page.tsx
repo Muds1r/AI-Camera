@@ -299,7 +299,7 @@ export default function TeamAttendancePage() {
             <input
               className={fieldClass}
               required
-              placeholder="Name"
+              placeholder="Enter holiday name"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />

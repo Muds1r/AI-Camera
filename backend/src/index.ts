@@ -33,9 +33,9 @@ app.get('/health', (_req: Request, res: Response) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/company', companyRoutes);
-app.use('/api', workforceRoutes);
-app.use('/api/users', userRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api', workforceRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/medical-requests', medicalRoutes);
 app.use('/api/cameras', cameraRoutes);

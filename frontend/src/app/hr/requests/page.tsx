@@ -17,6 +17,13 @@ import { apiJson } from '@/lib/api';
 
 type Tab = 'medical' | 'opd' | 'leave' | 'profile';
 
+function parseTab(value: string | null): Tab {
+  if (value === 'opd' || value === 'leave' || value === 'profile' || value === 'medical') {
+    return value;
+  }
+  return 'medical';
+}
+
 interface Row {
   id: string;
   status: string;
@@ -63,10 +70,20 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function ApprovalsPage() {
-  const [tab, setTab] = useState<Tab>('medical');
+  return (
+    <Suspense fallback={<PageFrame title="Requests & Approvals" />}>
+      <ApprovalsPageContent />
+    </Suspense>
+  );
+}
+
+function ApprovalsPageContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = parseTab(searchParams.get('tab'));
   const [rows, setRows] = useState<Row[]>([]);
   const [query, setQuery] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('pending');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [error, setError] = useState('');
@@ -154,11 +171,11 @@ export default function ApprovalsPage() {
   }
 
   useEffect(() => {
-    load('medical', { query: '', status: '', from: '', to: '' }).catch((err: unknown) =>
+    load(tab, { query: '', status: 'pending', from: '', to: '' }).catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab]);
 
   async function review() {
     if (!pending) return;
@@ -197,8 +214,12 @@ export default function ApprovalsPage() {
             type="button"
             className={tab === item.id ? tabActiveClass : tabIdleClass}
             onClick={() => {
-              setTab(item.id);
-              load(item.id).catch(() => undefined);
+              setError('');
+              setQuery('');
+              setStatus('pending');
+              setFrom('');
+              setTo('');
+              router.replace(`/hr/requests?tab=${item.id}`);
             }}
           >
             {item.label}
@@ -233,9 +254,9 @@ export default function ApprovalsPage() {
           type="date"
           aria-label="From date"
           value={from}
-          onChange={(event) => {
-            setFrom(event.target.value);
-            load(tab, { query, status, from: event.target.value, to }).catch(() => undefined);
+          onChange={(value) => {
+            setFrom(value);
+            load(tab, { query, status, from: value, to }).catch(() => undefined);
           }}
         />
         <input
@@ -243,9 +264,9 @@ export default function ApprovalsPage() {
           type="date"
           aria-label="To date"
           value={to}
-          onChange={(event) => {
-            setTo(event.target.value);
-            load(tab, { query, status, from, to: event.target.value }).catch(() => undefined);
+          onChange={(value) => {
+            setTo(value);
+            load(tab, { query, status, from, to: value }).catch(() => undefined);
           }}
         />
       </div>

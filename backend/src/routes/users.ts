@@ -53,7 +53,7 @@ router.patch(
     if (passwordChanged) {
       const session = await replaceSessionAfterPasswordChange(req.auth!.id);
       if (!session.ok) throw new HttpError(401, 'Unauthorized');
-      setAuthCookies(res, session.accessToken, session.refreshToken);
+      setAuthCookies(res, session.accessToken, session.refreshToken, session.rememberMe);
       res.json({
         user: session.user,
         accessToken: session.accessToken,

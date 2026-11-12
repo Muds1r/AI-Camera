@@ -188,6 +188,14 @@ export default function ProfilePage() {
         department,
         designation,
       };
+      for (const [key, value] of Object.entries(nextValues)) {
+        if (value !== current[key]) changes[key] = value;
+      }
+    } else {
+      Object.assign(changes, nextValues);
+    }
+
+    try {
       if (picture) {
         const form = new FormData();
         form.append('picture', picture);
@@ -205,7 +213,7 @@ export default function ProfilePage() {
           method: 'POST',
           body: JSON.stringify({ changes }),
         });
-        setMessage('Profile update sent to HR.');
+        setMessage('Profile update sent to HR for approval.');
       }
       setPicture(null);
       await load();

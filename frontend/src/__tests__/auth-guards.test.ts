@@ -19,6 +19,7 @@ describe('route guards', () => {
     expect(canAccessPath('/cameras', 'dataview')).toBe('allow');
     expect(canAccessPath('/requests', null)).toBe('login');
     expect(canAccessPath('/login', null)).toBe('allow');
+    expect(canAccessPath('/api/auth/forgot-password', null)).toBe('allow');
   });
 
   it('rejects external redirect targets', () => {

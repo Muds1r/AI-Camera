@@ -185,20 +185,13 @@ export default function RequestsPage() {
                 </option>
               ))}
             </select>
-            <input
-              className={fieldClass}
-              type="date"
+            <DateField
               required
+              placeholder="Enter leave start date"
               value={start}
-              onChange={(event) => setStart(event.target.value)}
+              onChange={setStart}
             />
-            <input
-              className={fieldClass}
-              type="date"
-              required
-              value={end}
-              onChange={(event) => setEnd(event.target.value)}
-            />
+            <DateField required placeholder="Enter leave end date" value={end} onChange={setEnd} />
             <textarea
               className={`${fieldClass} min-h-20 md:col-span-2`}
               required

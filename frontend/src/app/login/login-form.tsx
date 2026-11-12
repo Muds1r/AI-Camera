@@ -46,11 +46,17 @@ export function LoginForm() {
     setError('');
     setPending(true);
 
+    const companyEmail = email.trim().toLowerCase();
+
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email: companyEmail,
+          password,
+          rememberMe,
+        }),
       });
       const data = (await response.json().catch(() => null)) as LoginErrorBody | null;
       if (!response.ok) {

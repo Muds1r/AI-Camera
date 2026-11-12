@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { REFRESH_COOKIE, ACCESS_TTL_SECONDS } from '../lib/auth/tokens';
-import { clearAuthCookies, readCookie, setAuthCookies } from '../lib/auth/cookies';
+import { clearAuthCookies, parseRememberMe, readCookie, setAuthCookies } from '../lib/auth/cookies';
 import { publicUserSelect } from '../lib/auth/users';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
@@ -14,6 +14,20 @@ function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => P
     fn(req, res, next).catch(next);
   };
 }
+
+router.post(
+  '/forgot-password',
+  asyncHandler(async (req, res) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+    const clientKey = `${req.ip ?? 'unknown'}:${email || 'blank'}`;
+    if (isForgotPasswordRateLimited(clientKey)) {
+      res.json({ message: FORGOT_PASSWORD_SUCCESS_MESSAGE });
+      return;
+    }
+    const result = await forgotPassword(req.body?.email);
+    res.json(result);
+  }),
+);
 
 router.post(
   '/login',
@@ -30,11 +44,12 @@ router.post(
       throw new HttpError(401, 'Invalid email or password');
     }
 
-    setAuthCookies(res, result.accessToken, result.refreshToken);
+    setAuthCookies(res, result.accessToken, result.refreshToken, result.rememberMe);
     res.json({
       user: result.user,
       accessToken: result.accessToken,
       expiresIn: ACCESS_TTL_SECONDS,
+      rememberMe: result.rememberMe,
     });
   }),
 );
@@ -48,11 +63,12 @@ router.post(
       throw new HttpError(401, 'Invalid session');
     }
 
-    setAuthCookies(res, result.accessToken, result.refreshToken);
+    setAuthCookies(res, result.accessToken, result.refreshToken, result.rememberMe);
     res.json({
       user: result.user,
       accessToken: result.accessToken,
       expiresIn: ACCESS_TTL_SECONDS,
+      rememberMe: result.rememberMe,
     });
   }),
 );

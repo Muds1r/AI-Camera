@@ -5,6 +5,7 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/login',
   '/api/auth/refresh',
   '/api/auth/logout',
+  '/api/auth/forgot-password',
   '/api/company/branding',
 ]);
 
@@ -31,6 +32,7 @@ export type AccessDecision = 'allow' | 'login' | 'deny';
  */
 export function canAccessPath(pathname: string, role: Role | null): AccessDecision {
   if (PUBLIC_PATHS.has(pathname)) return 'allow';
+  if (pathname.startsWith('/api/uploads/avatars/')) return 'allow';
   if (pathname.startsWith('/api/')) return role ? 'allow' : 'login';
   if (!role || !isRole(role)) return 'login';
 

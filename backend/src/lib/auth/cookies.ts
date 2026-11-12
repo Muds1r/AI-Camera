@@ -1,19 +1,41 @@
 import { Response } from 'express';
-import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, REFRESH_COOKIE, REFRESH_TTL_SECONDS } from './tokens';
+import { ACCESS_COOKIE, ACCESS_TTL_SECONDS, REFRESH_COOKIE, refreshTtlSeconds } from './tokens';
 
-function baseOptions(maxAgeSeconds: number) {
-  return {
+type CookieBase = {
+  httpOnly: true;
+  secure: boolean;
+  sameSite: 'lax';
+  path: string;
+  maxAge?: number;
+};
+
+function cookieBase(maxAgeSeconds?: number): CookieBase {
+  const options: CookieBase = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax' as const,
+    sameSite: 'lax',
     path: '/',
-    maxAge: maxAgeSeconds * 1000,
   };
+  if (typeof maxAgeSeconds === 'number') {
+    options.maxAge = maxAgeSeconds * 1000;
+  }
+  return options;
 }
 
-export function setAuthCookies(res: Response, accessToken: string, refreshToken: string): void {
-  res.cookie(ACCESS_COOKIE, accessToken, baseOptions(ACCESS_TTL_SECONDS));
-  res.cookie(REFRESH_COOKIE, refreshToken, baseOptions(REFRESH_TTL_SECONDS));
+export function setAuthCookies(
+  res: Response,
+  accessToken: string,
+  refreshToken: string,
+  rememberMe = false,
+): void {
+  // Access stays short-lived either way; refresh persistence follows Remember me.
+  res.cookie(ACCESS_COOKIE, accessToken, cookieBase(ACCESS_TTL_SECONDS));
+  if (rememberMe) {
+    res.cookie(REFRESH_COOKIE, refreshToken, cookieBase(refreshTtlSeconds(true)));
+  } else {
+    // Session cookie: cleared when the browser closes.
+    res.cookie(REFRESH_COOKIE, refreshToken, cookieBase());
+  }
 }
 
 export function clearAuthCookies(res: Response): void {
@@ -50,4 +72,16 @@ export function parseCookieHeader(header: string | undefined): Record<string, st
 export function readCookie(header: string | undefined, name: string): string | undefined {
   const value = parseCookieHeader(header)[name];
   return value || undefined;
+}
+
+/** Accepts boolean or common form/JSON truthy strings; everything else is false. */
+export function parseRememberMe(value: unknown): boolean {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return (
+      normalized === 'true' || normalized === '1' || normalized === 'on' || normalized === 'yes'
+    );
+  }
+  return false;
 }
