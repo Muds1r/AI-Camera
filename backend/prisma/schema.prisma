@@ -24,13 +24,30 @@ enum Role {
   employee
   dataview
   hr
+  finance
   super_admin
+}
+
+enum EmploymentStatus {
+  active
+  resigned
+}
+
+enum ShiftKind {
+  day
+  night
 }
 
 enum MedicalRequestStatus {
   pending
   approved
   rejected
+}
+
+enum NotificationKind {
+  request_submitted
+  request_approved
+  request_rejected
 }
 
 enum AttendanceStatus {
@@ -103,6 +120,8 @@ model Company {
   weekend_days String   @default("0")
   work_start   String   @default("09:00")
   work_end     String   @default("17:00")
+  night_start  String   @default("21:00")
+  night_end    String   @default("05:00")
   updated_at   DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   @@map("company")
@@ -134,24 +153,67 @@ model User {
   medical_limit   Float    @default(0)
   opd_limit       Float    @default(0)
   clock_enabled   Boolean  @default(true)
+  login_enabled   Boolean  @default(true)
+  employee_code   String?  @unique
+  employment_status EmploymentStatus @default(active)
+  left_on         DateTime? @db.Date
+  shift           ShiftKind @default(day)
+  password_changed_at DateTime? @db.Timestamptz(6)
   is_active       Boolean  @default(true)
   created_at      DateTime @default(now()) @db.Timestamptz(6)
   updated_at      DateTime @default(now()) @updatedAt @db.Timestamptz(6)
 
   refresh_tokens     RefreshToken[]
   attendance         Attendance[]
+  attendance_corrections AttendanceCorrection[] @relation("AttendanceCorrections")
+  reviewed_attendance    AttendanceCorrection[] @relation("ReviewedAttendanceCorrections")
   medical_requests   MedicalRequest[]         @relation("MedicalRequests")
+  submitted_medical   MedicalRequest[]        @relation("SubmittedMedicalRequests")
   reviewed_requests  MedicalRequest[]         @relation("ReviewedMedicalRequests")
   leave_balances     LeaveBalance[]
   leave_requests     LeaveRequest[]           @relation("LeaveRequests")
   reviewed_leave     LeaveRequest[]           @relation("ReviewedLeave")
   profile_requests   ProfileUpdateRequest[]   @relation("ProfileRequests")
   reviewed_profiles  ProfileUpdateRequest[]   @relation("ReviewedProfiles")
+  overtime_requests  OvertimeRequest[]        @relation("OvertimeRequests")
+  reviewed_overtime  OvertimeRequest[]        @relation("ReviewedOvertime")
   audit_logs         AuditLog[]
+  notifications      Notification[]
+  policies           Policy[]
+  announcements      Announcement[]
+  login_events       LoginEvent[]
+  salary_changes     SalaryChange[]
 
   @@index([role])
   @@index([is_active])
   @@map("users")
+}
+
+model LoginEvent {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String?  @db.Uuid
+  email      String
+  event      String
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  user       User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@index([created_at(sort: Desc)])
+  @@map("login_events")
+}
+
+model SalaryChange {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id           String   @db.Uuid
+  salary_basic      Float
+  salary_allowance  Float
+  salary_deduction  Float
+  actor_id          String?  @db.Uuid
+  created_at        DateTime @default(now()) @db.Timestamptz(6)
+  user              User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@map("salary_changes")
 }
 
 model RefreshToken {
@@ -188,6 +250,28 @@ model Attendance {
   @@map("attendance")
 }
 
+model AttendanceCorrection {
+  id               String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id          String               @db.Uuid
+  work_date        DateTime             @db.Date
+  requested_status AttendanceStatus
+  clock_in         DateTime?            @db.Timestamptz(6)
+  clock_out        DateTime?            @db.Timestamptz(6)
+  reason           String
+  status           MedicalRequestStatus @default(pending)
+  review_note      String?
+  reviewed_by      String?              @db.Uuid
+  reviewed_at      DateTime?            @db.Timestamptz(6)
+  created_at       DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at       DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  requester        User                 @relation("AttendanceCorrections", fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer         User?                @relation("ReviewedAttendanceCorrections", fields: [reviewed_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([status])
+  @@map("attendance_corrections")
+}
+
 model Holiday {
   id         String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   holiday_on DateTime    @db.Date
@@ -204,6 +288,7 @@ model LeaveType {
   code        String         @unique
   name        String
   default_days Int           @default(0)
+  is_paid     Boolean        @default(true)
   is_active   Boolean        @default(true)
   balances    LeaveBalance[]
   requests    LeaveRequest[]
@@ -247,6 +332,27 @@ model LeaveRequest {
   @@map("leave_requests")
 }
 
+model OvertimeRequest {
+  id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id     String               @db.Uuid
+  work_date   DateTime             @db.Date
+  hours       Float
+  reason      String
+  status      MedicalRequestStatus @default(pending)
+  review_note String?
+  reviewed_by String?              @db.Uuid
+  reviewed_at DateTime?            @db.Timestamptz(6)
+  created_at  DateTime             @default(now()) @db.Timestamptz(6)
+  updated_at  DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
+  requester   User                 @relation("OvertimeRequests", fields: [user_id], references: [id], onDelete: Cascade)
+  reviewer    User?                @relation("ReviewedOvertime", fields: [reviewed_by], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([status])
+  @@index([work_date])
+  @@map("overtime_requests")
+}
+
 model ProfileUpdateRequest {
   id          String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   user_id     String               @db.Uuid
@@ -287,6 +393,7 @@ model MedicalRequest {
   amount       Float                @default(0)
   reason       String
   document_url String?
+  submitted_by String?              @db.Uuid
   status      MedicalRequestStatus @default(pending)
   review_note String?
   reviewed_by String?              @db.Uuid
@@ -294,9 +401,64 @@ model MedicalRequest {
   created_at  DateTime             @default(now()) @db.Timestamptz(6)
   updated_at  DateTime             @default(now()) @updatedAt @db.Timestamptz(6)
   requester   User                 @relation("MedicalRequests", fields: [user_id], references: [id], onDelete: Cascade)
+  submitter   User?                @relation("SubmittedMedicalRequests", fields: [submitted_by], references: [id], onDelete: SetNull)
   reviewer    User?                @relation("ReviewedMedicalRequests", fields: [reviewed_by], references: [id], onDelete: SetNull)
 
   @@index([user_id])
   @@index([status])
   @@map("medical_requests")
+}
+
+model Policy {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title      String
+  body       String
+  created_by String?  @db.Uuid
+  created_at DateTime @default(now()) @db.Timestamptz(6)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+  author     User?    @relation(fields: [created_by], references: [id], onDelete: SetNull)
+
+  @@index([created_at(sort: Desc)])
+  @@map("policies")
+}
+
+model Announcement {
+  id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title      String
+  body       String              @default("")
+  created_by String?             @db.Uuid
+  created_at DateTime            @default(now()) @db.Timestamptz(6)
+  updated_at DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+  author     User?               @relation(fields: [created_by], references: [id], onDelete: SetNull)
+  images     AnnouncementImage[]
+
+  @@index([created_at(sort: Desc)])
+  @@map("announcements")
+}
+
+model AnnouncementImage {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  announcement_id String       @db.Uuid
+  url             String
+  position        Int
+  announcement    Announcement @relation(fields: [announcement_id], references: [id], onDelete: Cascade)
+
+  @@index([announcement_id, position])
+  @@map("announcement_images")
+}
+
+model Notification {
+  id         String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String           @db.Uuid
+  kind       NotificationKind
+  title      String
+  body       String
+  href       String
+  is_read    Boolean          @default(false)
+  created_at DateTime         @default(now()) @db.Timestamptz(6)
+  user       User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@index([user_id, is_read])
+  @@map("notifications")
 }

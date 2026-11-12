@@ -12,6 +12,11 @@ describe('route guards', () => {
     expect(canAccessPath('/profile', 'dataview')).toBe('allow');
     expect(canAccessPath('/hr', 'employee')).toBe('deny');
     expect(canAccessPath('/hr', 'dataview')).toBe('deny');
+    expect(canAccessPath('/hr', 'finance')).toBe('deny');
+    expect(canAccessPath('/finance/claims', 'finance')).toBe('allow');
+    expect(canAccessPath('/finance/claims', 'hr')).toBe('deny');
+    expect(canAccessPath('/policies', 'employee')).toBe('allow');
+    expect(canAccessPath('/policies', 'finance')).toBe('allow');
     expect(canAccessPath('/hr', 'hr')).toBe('allow');
     expect(canAccessPath('/admin/users', 'hr')).toBe('deny');
     expect(canAccessPath('/admin/users', 'super_admin')).toBe('allow');

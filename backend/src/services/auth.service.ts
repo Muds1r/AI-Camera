@@ -48,6 +48,16 @@ async function issueSession(user: User, rememberMe = false): Promise<SessionResu
   return { ok: true, accessToken, refreshToken, user: toPublicUser(user), rememberMe };
 }
 
+async function recordLogin(email: string, event: string, userId?: string | null) {
+  try {
+    await prisma.loginEvent.create({
+      data: { email, event, user_id: userId ?? null },
+    });
+  } catch (err) {
+    console.error('Could not record login event', err);
+  }
+}
+
 export async function login(
   email: unknown,
   password: unknown,
@@ -63,13 +73,21 @@ export async function login(
 
   if (!user) {
     await verifyPasswordAgainstDummy(password);
+    await recordLogin(normalized, 'login_failure');
     return { ok: false, reason: 'invalid' };
   }
 
   const matches = await verifyPassword(password, user.password_hash);
-  if (!matches) return { ok: false, reason: 'invalid' };
-  if (!user.is_active) return { ok: false, reason: 'inactive' };
+  if (!matches) {
+    await recordLogin(normalized, 'login_failure', user.id);
+    return { ok: false, reason: 'invalid' };
+  }
+  if (!user.is_active || user.login_enabled === false) {
+    await recordLogin(normalized, 'login_blocked', user.id);
+    return { ok: false, reason: 'inactive' };
+  }
 
+  await recordLogin(normalized, 'login_success', user.id);
   return issueSession(user, remember);
 }
 
@@ -111,7 +129,9 @@ export async function refreshSession(rawToken: string | undefined): Promise<Sess
   }
 
   if (existing.expires_at.getTime() <= Date.now()) return { ok: false, reason: 'expired' };
-  if (!existing.user.is_active) return { ok: false, reason: 'inactive' };
+  if (!existing.user.is_active || existing.user.login_enabled === false) {
+    return { ok: false, reason: 'inactive' };
+  }
 
   const refreshToken = generateRefreshToken();
   const nextId = randomUUID();
@@ -164,15 +184,17 @@ export async function logout(rawToken: string | undefined, allDevices: boolean):
 
   if (allDevices) {
     await revokeAllRefreshTokens(existing.user_id);
-    return;
-  }
-
-  if (!existing.revoked_at) {
+  } else if (!existing.revoked_at) {
     await prisma.refreshToken.update({
       where: { id: existing.id },
       data: { revoked_at: new Date() },
     });
   }
+  const owner = await prisma.user.findUnique({
+    where: { id: existing.user_id },
+    select: { email: true },
+  });
+  await recordLogin(owner?.email ?? 'unknown', 'logout', existing.user_id);
 }
 
 export async function revokeAllRefreshTokens(userId: string): Promise<void> {
@@ -229,10 +251,85 @@ export async function forgotPassword(email: unknown): Promise<{ message: string 
   const password_hash = await hashPassword(newPassword);
   await prisma.user.update({
     where: { id: user.id },
-    data: { password_hash },
+    data: { password_hash, password_changed_at: new Date() },
   });
   await revokeAllRefreshTokens(user.id);
   await writeAudit(null, 'auth.forgot_password', 'user', user.id);
+  await recordLogin(user.email, 'password_reset', user.id);
 
   return { message: FORGOT_PASSWORD_SUCCESS_MESSAGE };
+}
+
+export async function listSessions(userId: string, currentToken: string | undefined) {
+  const currentHash = currentToken ? hashRefreshToken(currentToken) : '';
+  const rows = await prisma.refreshToken.findMany({
+    where: { user_id: userId, revoked_at: null, expires_at: { gt: new Date() } },
+    orderBy: { created_at: 'desc' },
+    select: {
+      id: true,
+      created_at: true,
+      remember_me: true,
+      expires_at: true,
+      token_hash: true,
+    },
+  });
+  return rows.map(({ token_hash, ...row }) => ({ ...row, current: token_hash === currentHash }));
+}
+
+export async function revokeOtherSessions(userId: string, currentToken: string | undefined) {
+  const currentHash = currentToken ? hashRefreshToken(currentToken) : '';
+  await prisma.refreshToken.updateMany({
+    where: { user_id: userId, revoked_at: null, NOT: { token_hash: currentHash } },
+    data: { revoked_at: new Date() },
+  });
+}
+
+export async function revokeSession(userId: string, sessionId: string) {
+  const result = await prisma.refreshToken.updateMany({
+    where: { id: sessionId, user_id: userId, revoked_at: null },
+    data: { revoked_at: new Date() },
+  });
+  if (result.count === 0) throw new HttpError(404, 'Session not found');
+}
+
+export async function personActivity(userId: string) {
+  const [events, audits, pay] = await Promise.all([
+    prisma.loginEvent.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      take: 20,
+    }),
+    prisma.auditLog.findMany({
+      where: { OR: [{ actor_id: userId }, { target_id: userId }] },
+      orderBy: { created_at: 'desc' },
+      take: 20,
+    }),
+    prisma.salaryChange.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: 'desc' },
+      take: 8,
+    }),
+  ]);
+  const items = [
+    ...events.map((event) => ({
+      id: event.id,
+      at: event.created_at,
+      label: event.event.replace(/_/g, ' '),
+      detail: event.email,
+    })),
+    ...audits.map((entry) => ({
+      id: entry.id,
+      at: entry.created_at,
+      label: entry.action,
+      detail: entry.detail,
+    })),
+    ...pay.map((change) => ({
+      id: change.id,
+      at: change.created_at,
+      label: 'salary change',
+      detail: `Basic ${change.salary_basic}, allowance ${change.salary_allowance}, deduction ${change.salary_deduction}`,
+    })),
+  ];
+  items.sort((a, b) => b.at.getTime() - a.at.getTime());
+  return items.slice(0, 30);
 }

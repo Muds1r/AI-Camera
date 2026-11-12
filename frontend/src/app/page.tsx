@@ -6,6 +6,7 @@ import { AppShell } from '@/components/app-shell';
 import { HrWorkspaceDashboard, personalSnapshotFromApi } from '@/components/dashboard/hr-workspace';
 import { PageSection, linkMutedClass } from '@/components/page-frame';
 import { Card, ListRow, LoadingState, MetricStrip, Notice } from '@/components/widgets';
+import { AnnouncementsPanel } from '@/components/announcements';
 import { apiJson } from '@/lib/api';
 
 interface DashboardData {
@@ -39,6 +40,7 @@ interface DashboardData {
     absentToday?: number;
     pendingMedical: number;
     pendingLeave: number;
+    pendingOvertime: number;
     pendingProfile: number;
   };
   admin?: {
@@ -47,6 +49,10 @@ interface DashboardData {
     inactiveHr: number;
     recentHr: { id: string; full_name: string; email: string; is_active: boolean }[];
     logs: { id: string; action: string; detail: string | null; created_at: string }[];
+  };
+  finance?: {
+    pendingMedical: number;
+    pendingOpd: number;
   };
 }
 
@@ -81,6 +87,7 @@ export default function HomePage() {
     <AppShell title="Dashboard" workspaceLabel={isHr ? 'HR workspace' : undefined}>
       <div className="flex flex-col gap-10">
         <Notice error={error} />
+        <AnnouncementsPanel />
         {!data && !error ? <LoadingState label="Loading dashboard…" /> : null}
 
         {isHr ? (
@@ -93,6 +100,7 @@ export default function HomePage() {
               absentToday: data.hr!.absentToday ?? 0,
               pendingMedical: data.hr!.pendingMedical,
               pendingLeave: data.hr!.pendingLeave,
+              pendingOvertime: data.hr!.pendingOvertime,
               pendingProfile: data.hr!.pendingProfile,
             }}
             personal={personalSnapshotFromApi({
@@ -135,13 +143,32 @@ export default function HomePage() {
           </PageSection>
         ) : null}
 
+        {data?.finance ? (
+          <PageSection
+            title="Claims to review"
+            description="Medical and OPD requests employees filed themselves. Claims you file for a worker are approved by HR."
+          >
+            <MetricStrip
+              items={[
+                { label: 'Medical', value: data.finance.pendingMedical },
+                { label: 'OPD', value: data.finance.pendingOpd },
+              ]}
+            />
+            <Link href="/finance/claims" className={linkMutedClass}>
+              Open claims
+            </Link>
+          </PageSection>
+        ) : null}
+
         {personal && summary && data?.role !== 'hr' ? (
           <PageSection
             title={data?.role === 'dataview' ? 'Attendance snapshot' : 'Your snapshot'}
             description={
               data?.role === 'dataview'
                 ? 'Your clock and monthly record.'
-                : 'Pay, benefits, and attendance for your account.'
+                : data?.role === 'finance'
+                  ? 'Your own attendance. Claim review is above.'
+                  : 'Pay, benefits, and attendance for your account.'
             }
           >
             <MetricStrip
@@ -176,7 +203,7 @@ export default function HomePage() {
               ]}
             />
 
-            {data?.role !== 'dataview' && recentItems.length > 0 ? (
+            {data?.role !== 'dataview' && data?.role !== 'finance' && recentItems.length > 0 ? (
               <Card
                 title="Recent requests"
                 action={

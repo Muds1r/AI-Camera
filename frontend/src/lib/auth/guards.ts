@@ -12,6 +12,7 @@ const PUBLIC_PATHS = new Set([
 const ROLE_PREFIXES: { prefix: string; roles: readonly Role[] }[] = [
   { prefix: '/admin', roles: ['super_admin'] },
   { prefix: '/hr', roles: ['hr', 'super_admin'] },
+  { prefix: '/finance', roles: ['finance', 'super_admin'] },
   { prefix: '/cameras', roles: ['dataview', 'super_admin'] },
   { prefix: '/operations', roles: ['dataview', 'super_admin'] },
   { prefix: '/requests', roles: ['employee', 'hr', 'super_admin'] },

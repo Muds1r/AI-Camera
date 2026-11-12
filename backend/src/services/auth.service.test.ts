@@ -63,6 +63,7 @@ jest.mock('../lib/prisma', () => {
       }) => Promise<{ count: number }>;
     };
     $transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+    loginEvent: { create: (args: { data: unknown }) => Promise<unknown> };
   } = {
     user: {
       findUnique: async ({ where }: { where: { email?: string; id?: string } }) =>
@@ -123,6 +124,9 @@ jest.mock('../lib/prisma', () => {
       },
     },
     $transaction: async (fn) => fn(prisma),
+    loginEvent: {
+      create: async () => ({ id: 'login-event' }),
+    },
   };
 
   return { prisma };

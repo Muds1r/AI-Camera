@@ -36,9 +36,17 @@ export async function authenticateRequest(req: Request): Promise<AuthUser> {
 export async function loadActiveUser(claims: SessionClaims): Promise<AuthUser> {
   const user = await prisma.user.findUnique({
     where: { id: claims.sub },
-    select: { id: true, email: true, role: true, full_name: true, is_active: true },
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      full_name: true,
+      is_active: true,
+      login_enabled: true,
+    },
   });
 
-  if (!user || !user.is_active) throw new HttpError(401, 'Unauthorized');
+  if (!user || !user.is_active || user.login_enabled === false)
+    throw new HttpError(401, 'Unauthorized');
   return user;
 }

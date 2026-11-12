@@ -25,6 +25,12 @@ export interface SessionUser {
   medical_limit: number;
   opd_limit: number;
   clock_enabled: boolean;
+  login_enabled: boolean;
+  employee_code: string | null;
+  employment_status: 'active' | 'resigned';
+  left_on: string | null;
+  shift: 'day' | 'night';
+  password_changed_at: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;

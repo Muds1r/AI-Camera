@@ -34,6 +34,45 @@ const upload = multer({
   },
 });
 
+const imageUpload = multer({
+  storage: multer.diskStorage({
+    destination: DOCUMENT_DIR,
+    filename: (_req, file, callback) => {
+      const extension = ALLOWED_TYPES.get(file.mimetype) ?? '.bin';
+      callback(null, `${randomUUID()}${extension}`);
+    },
+  }),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, callback) => {
+    if (
+      file.mimetype === 'image/jpeg' ||
+      file.mimetype === 'image/png' ||
+      file.mimetype === 'image/webp'
+    ) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Image must be a JPEG, PNG, or WebP file'));
+  },
+});
+
+export function uploadImage(req: Request, res: Response, next: NextFunction): void {
+  imageUpload.single('image')(req, res, (err: unknown) => {
+    if (!err) {
+      next();
+      return;
+    }
+    const code = typeof err === 'object' && err && 'code' in err ? String(err.code) : '';
+    const message =
+      code === 'LIMIT_FILE_SIZE'
+        ? 'Image must be 5 MB or smaller'
+        : err instanceof Error
+          ? err.message
+          : 'Image upload failed';
+    res.status(400).json({ error: message });
+  });
+}
+
 export function uploadDocument(req: Request, res: Response, next: NextFunction): void {
   upload.single('document')(req, res, (err: unknown) => {
     if (!err) {
