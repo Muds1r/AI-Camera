@@ -1,4 +1,4 @@
-import { MedicalRequestStatus } from '@prisma/client';
+import { MedicalRequestStatus, Role } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
 import {
@@ -25,7 +25,11 @@ export function listMedicalRequests(actor: AuthUser, scope: unknown, behalf: unk
   }
 
   return prisma.medicalRequest.findMany({
-    where: wantsQueue ? { submitted_by: onBehalf ? { not: null } : null } : { user_id: actor.id },
+    where: wantsQueue
+      ? onBehalf
+        ? { submitted_by: null, requester: { role: Role.finance } }
+        : { submitted_by: null, requester: { role: { not: Role.finance } } }
+      : { user_id: actor.id },
     include: requestInclude,
     orderBy: { created_at: 'desc' },
     take: 100,
@@ -74,12 +78,16 @@ export async function reviewMedicalRequest(
   if (request.user_id === actor.id) {
     throw new HttpError(403, 'You cannot review your own medical request');
   }
-  const onBehalf = Boolean(request.submitted_by);
-  if (onBehalf && !roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf)) {
-    throw new HttpError(403, 'HR reviews claims that finance filed for a worker');
+  const owner = await prisma.user.findUnique({
+    where: { id: request.user_id },
+    select: { role: true, full_name: true },
+  });
+  const hrQueue = Boolean(request.submitted_by) || owner?.role === Role.finance;
+  if (hrQueue && !roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf)) {
+    throw new HttpError(403, 'HR reviews claims filed for a worker and finance staff claims');
   }
-  if (!onBehalf && !roleHasPermission(actor.role, Permission.MedicalReview)) {
-    throw new HttpError(403, 'Finance reviews claims an employee filed');
+  if (!hrQueue && !roleHasPermission(actor.role, Permission.MedicalReview)) {
+    throw new HttpError(403, 'Finance reviews claims an employee or HR filed');
   }
   if (request.status !== MedicalRequestStatus.pending) {
     throw new HttpError(409, 'This request has already been reviewed');
@@ -101,6 +109,7 @@ export async function reviewMedicalRequest(
     amount: updated.amount,
     status,
     reviewNote: updated.review_note,
+    ...(owner?.role === Role.finance ? { audience: 'finance' as const } : {}),
   });
   if (request.submitted_by && request.submitted_by !== updated.user_id) {
     const owner = await prisma.user.findUnique({

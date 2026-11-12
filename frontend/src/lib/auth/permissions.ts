@@ -82,6 +82,8 @@ export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   finance: [
     Permission.ProfileReadOwn,
     Permission.UsersRead,
+    Permission.MedicalSubmitOwn,
+    Permission.MedicalReadOwn,
     Permission.MedicalSubmitFor,
     Permission.MedicalReview,
   ],

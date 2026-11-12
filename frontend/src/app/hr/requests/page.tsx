@@ -75,8 +75,8 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'overtime', label: 'Overtime' },
   { id: 'attendance', label: 'Attendance' },
   { id: 'profile', label: 'Profile updates' },
-  { id: 'medical', label: 'Filed medical' },
-  { id: 'opd', label: 'Filed OPD' },
+  { id: 'medical', label: 'Finance medical' },
+  { id: 'opd', label: 'Finance OPD' },
 ];
 
 export default function ApprovalsPage() {
@@ -129,7 +129,7 @@ function ApprovalsPageContent() {
           data.requests.map((item) => ({
             id: item.id,
             status: item.status,
-            title: `${item.submitter?.full_name ?? 'Finance'} filed for ${item.requester.full_name} · ${item.amount}`,
+            title: `${item.requester.full_name} · ${item.amount}`,
             detail: item.reason,
             document_url: item.document_url,
             review_note: item.review_note,
@@ -270,7 +270,7 @@ function ApprovalsPageContent() {
   return (
     <PageFrame
       title="Requests & Approvals"
-      description="Leave, overtime, attendance, and profile updates. Filed medical and OPD are claims finance submitted for a worker. Employees file their own medical and OPD with Finance."
+      description="Leave, overtime, attendance, and profile updates. Finance medical and OPD are claims finance staff filed for themselves. HR files their own medical and OPD, and Finance approves those."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
