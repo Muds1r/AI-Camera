@@ -1416,7 +1416,6 @@ export async function salaryView(userId: string) {
 }
 
 export async function dashboardFor(actor: AuthUser) {
-  const month = `${new Date().getUTCFullYear()}-${String(new Date().getUTCMonth() + 1).padStart(2, '0')}`;
   const company = await companySettings();
   const base = { role: actor.role, company: { name: company.name, logo_url: company.logo_url } };
   if (actor.role === Role.super_admin) {
@@ -1446,7 +1445,6 @@ export async function dashboardFor(actor: AuthUser) {
       },
     };
   }
-  const own = await ownAttendance(actor.id, month);
   const balances = await benefitBalances(actor.id).catch(() => null);
   const leaves = actor.role === Role.dataview ? [] : await leaveBalances(actor.id);
   const salary = actor.role === Role.dataview ? null : await salaryView(actor.id);
@@ -1462,7 +1460,6 @@ export async function dashboardFor(actor: AuthUser) {
     include: { leave_type: true },
   });
   const personal = {
-    attendance: own,
     benefits: balances,
     leaves,
     salary,
@@ -1481,16 +1478,14 @@ export async function dashboardFor(actor: AuthUser) {
     return { ...base, personal, finance: { pendingMedical, pendingOpd } };
   }
   if (actor.role !== Role.hr) return { ...base, personal };
-  const today = utcDate();
   const [
     employees,
     inactive,
-    clockedIn,
     pendingMedical,
+    pendingOpd,
     pendingLeave,
     pendingProfile,
     pendingOvertime,
-    todayRows,
   ] = await Promise.all([
     prisma.user.count({
       where: { role: { in: [Role.employee, Role.dataview] }, is_active: true },
@@ -1498,20 +1493,16 @@ export async function dashboardFor(actor: AuthUser) {
     prisma.user.count({
       where: { role: { in: [Role.employee, Role.dataview] }, is_active: false },
     }),
-    prisma.attendance.count({
-      where: { work_date: today, clock_in: { not: null }, clock_out: null },
+    prisma.medicalRequest.count({
+      where: { status: 'pending', kind: BenefitKind.medical, ...hrBenefitQueue },
     }),
-    prisma.medicalRequest.count({ where: { status: 'pending', submitted_by: { not: null } } }),
+    prisma.medicalRequest.count({
+      where: { status: 'pending', kind: BenefitKind.opd, ...hrBenefitQueue },
+    }),
     prisma.leaveRequest.count({ where: { status: 'pending' } }),
     prisma.profileUpdateRequest.count({ where: { status: 'pending' } }),
     prisma.overtimeRequest.count({ where: { status: 'pending' } }),
-    prisma.attendance.groupBy({
-      by: ['status'],
-      where: { work_date: today },
-      _count: { _all: true },
-    }),
   ]);
-  const todayCount = Object.fromEntries(todayRows.map((row) => [row.status, row._count._all]));
   return {
     ...base,
     personal,
@@ -1519,11 +1510,8 @@ export async function dashboardFor(actor: AuthUser) {
       total: employees + inactive,
       employees,
       inactive,
-      clockedIn,
-      presentToday: todayCount.present ?? 0,
-      lateToday: todayCount.late ?? 0,
-      absentToday: todayCount.absent ?? 0,
       pendingMedical,
+      pendingOpd,
       pendingLeave,
       pendingProfile,
       pendingOvertime,

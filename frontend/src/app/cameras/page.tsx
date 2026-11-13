@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { PageFrame, cardClass } from '@/components/page-frame';
-import { Badge, EmptyState, Notice } from '@/components/widgets';
+import { Badge, EmptyState, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { usePaged } from '@/lib/use-paged';
 
 interface Camera {
   id: string;
@@ -16,6 +17,7 @@ interface Camera {
 export default function CamerasPage() {
   const [cameras, setCameras] = useState<Camera[]>([]);
   const [error, setError] = useState('');
+  const page = usePaged(cameras, 6);
 
   useEffect(() => {
     apiJson<{ cameras: Camera[] }>('/api/cameras')
@@ -30,7 +32,7 @@ export default function CamerasPage() {
       <Notice error={error} />
       {cameras.length === 0 && !error ? <EmptyState>No cameras registered yet.</EmptyState> : null}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {cameras.map((camera) => (
+        {page.slice.map((camera) => (
           <article key={camera.id} className={`${cardClass} overflow-hidden`}>
             <div className="bg-surface text-mute flex aspect-video items-center justify-center text-xs font-medium">
               {camera.stream_url ? 'Live feed' : 'No stream'}
@@ -45,6 +47,15 @@ export default function CamerasPage() {
           </article>
         ))}
       </div>
+      {page.showPager ? (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          pageSize={page.pageSize}
+          onPageChange={page.setPage}
+        />
+      ) : null}
     </PageFrame>
   );
 }

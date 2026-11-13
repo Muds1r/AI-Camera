@@ -3,10 +3,7 @@ import { Permission } from '../lib/auth/permissions';
 import { HttpError, routeParam } from '../lib/http';
 import { requireAnyPermission, requireAuth, requirePermission } from '../middleware/auth';
 import {
-  allAttendance,
   benefitBalances,
-  clockIn,
-  clockOut,
   dashboardFor,
   deleteHoliday,
   leaveBalances,
@@ -14,13 +11,10 @@ import {
   listHolidays,
   listLeave,
   listOvertime,
-  listAttendanceCorrections,
   listProfileRequests,
-  ownAttendance,
   reviewBenefit,
   reviewLeave,
   reviewOvertime,
-  reviewAttendanceCorrection,
   reviewProfileRequest,
   salaryView,
   saveHoliday,
@@ -28,7 +22,6 @@ import {
   submitBenefitFor,
   submitLeave,
   submitOvertime,
-  submitAttendanceCorrection,
   submitProfileRequest,
   updateLeaveDefaults,
 } from '../services/workforce.service';
@@ -50,74 +43,6 @@ router.get(
   '/dashboard',
   asyncHandler(async (req, res) => {
     res.json(await dashboardFor(req.auth!));
-  }),
-);
-
-router.post(
-  '/attendance/clock-in',
-  requirePermission(Permission.AttendanceClockOwn),
-  asyncHandler(async (req, res) => {
-    res.status(201).json({ attendance: await clockIn(req.auth!.id) });
-  }),
-);
-
-router.post(
-  '/attendance/clock-out',
-  requirePermission(Permission.AttendanceClockOwn),
-  asyncHandler(async (req, res) => {
-    res.json({ attendance: await clockOut(req.auth!.id) });
-  }),
-);
-
-router.get(
-  '/attendance/me',
-  requirePermission(Permission.AttendanceReadOwn),
-  asyncHandler(async (req, res) => {
-    res.json(await ownAttendance(req.auth!.id, req.query.month));
-  }),
-);
-
-router.get(
-  '/attendance',
-  requirePermission(Permission.AttendanceReadAll),
-  asyncHandler(async (req, res) => {
-    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
-    res.json(await allAttendance(req.query.month, q));
-  }),
-);
-
-router.get(
-  '/attendance-corrections',
-  requireAnyPermission(Permission.AttendanceReadOwn, Permission.AttendanceReadAll),
-  asyncHandler(async (req, res) => {
-    res.json({
-      requests: await listAttendanceCorrections(req.auth!, req.query.scope, req.query),
-    });
-  }),
-);
-
-router.post(
-  '/attendance-corrections',
-  requirePermission(Permission.AttendanceClockOwn),
-  asyncHandler(async (req, res) => {
-    res
-      .status(201)
-      .json({ request: await submitAttendanceCorrection(req.auth!.id, req.body ?? {}) });
-  }),
-);
-
-router.patch(
-  '/attendance-corrections/:id',
-  requirePermission(Permission.AttendanceReadAll),
-  asyncHandler(async (req, res) => {
-    res.json({
-      request: await reviewAttendanceCorrection(
-        req.auth!,
-        routeParam(req.params.id),
-        req.body?.status,
-        req.body?.review_note,
-      ),
-    });
   }),
 );
 

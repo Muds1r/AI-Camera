@@ -25,6 +25,8 @@ describe('route guards', () => {
     expect(canAccessPath('/requests', null)).toBe('login');
     expect(canAccessPath('/login', null)).toBe('allow');
     expect(canAccessPath('/api/auth/forgot-password', null)).toBe('allow');
+    expect(canAccessPath('/api/auth/forgot-password/verify', null)).toBe('allow');
+    expect(canAccessPath('/api/auth/forgot-password/complete', null)).toBe('allow');
   });
 
   it('rejects external redirect targets', () => {

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { PageFrame } from '@/components/page-frame';
-import { EmptyState, ListRow, Notice } from '@/components/widgets';
+import { EmptyState, ListRow, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { usePaged } from '@/lib/use-paged';
 
 interface Log {
   id: string;
@@ -17,6 +18,7 @@ interface Log {
 export default function LogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [error, setError] = useState('');
+  const page = usePaged(logs, 8);
 
   useEffect(() => {
     apiJson<{ logs: Log[] }>('/api/audit')
@@ -29,7 +31,7 @@ export default function LogsPage() {
       <Notice error={error} />
       {logs.length === 0 && !error ? <EmptyState>No activity recorded.</EmptyState> : null}
       <div className="space-y-2">
-        {logs.map((log) => (
+        {page.slice.map((log) => (
           <ListRow
             key={log.id}
             title={log.action}
@@ -44,6 +46,15 @@ export default function LogsPage() {
           />
         ))}
       </div>
+      {page.showPager ? (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          pageSize={page.pageSize}
+          onPageChange={page.setPage}
+        />
+      ) : null}
     </PageFrame>
   );
 }

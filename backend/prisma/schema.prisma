@@ -183,6 +183,7 @@ model User {
   announcements      Announcement[]
   login_events       LoginEvent[]
   salary_changes     SalaryChange[]
+  password_resets    PasswordReset[]
 
   @@index([role])
   @@index([is_active])
@@ -200,6 +201,21 @@ model LoginEvent {
   @@index([user_id, created_at(sort: Desc)])
   @@index([created_at(sort: Desc)])
   @@map("login_events")
+}
+
+model PasswordReset {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  user_id    String    @db.Uuid
+  code_hash  String
+  token_hash String?   @unique
+  attempts   Int       @default(0)
+  expires_at DateTime  @db.Timestamptz(6)
+  used_at    DateTime? @db.Timestamptz(6)
+  created_at DateTime  @default(now()) @db.Timestamptz(6)
+  user       User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at(sort: Desc)])
+  @@map("password_resets")
 }
 
 model SalaryChange {

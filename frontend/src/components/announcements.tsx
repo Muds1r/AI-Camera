@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
 import { cardClass } from '@/components/page-frame';
+import { Pagination } from '@/components/widgets';
 
 export interface Announcement {
   id: string;
@@ -24,8 +25,9 @@ export function postedOn(iso: string) {
 export function AnnouncementsPanel() {
   const [items, setItems] = useState<Announcement[]>([]);
   const [ready, setReady] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [page, setPage] = useState(1);
   const [open, setOpen] = useState<Announcement | null>(null);
+  const pageSize = 4;
 
   useEffect(() => {
     apiJson<{ announcements: Announcement[] }>('/api/announcements', undefined, { silent: true })
@@ -34,86 +36,69 @@ export function AnnouncementsPanel() {
       .finally(() => setReady(true));
   }, []);
 
-  const latest = items[0];
-  const older = items.slice(1);
-  const visibleOlder = expanded ? older : older.slice(0, 3);
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const current = Math.min(page, totalPages);
+  const visible = items.slice((current - 1) * pageSize, current * pageSize);
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-end justify-between gap-3">
-        <h2 className="text-display text-ink text-base font-semibold">Announcements</h2>
-        {older.length > 3 ? (
-          <button
-            type="button"
-            className="text-primary text-sm font-medium"
-            onClick={() => setExpanded((current) => !current)}
-          >
-            {expanded ? 'Show less' : `Earlier (${older.length})`}
-          </button>
+    <section className="flex h-full w-full flex-col gap-3">
+      <h2 className="text-display text-ink flex min-h-8 items-center text-base font-semibold">
+        Announcements
+      </h2>
+
+      <div className={`${cardClass} flex-1 overflow-hidden`}>
+        {!ready ? <p className="text-mute px-4 py-4 text-sm">Loading announcements…</p> : null}
+        {ready && items.length === 0 ? (
+          <p className="text-mute px-4 py-4 text-sm">No announcements yet.</p>
+        ) : null}
+
+        {visible.length > 0 ? (
+          <>
+            <ul className="divide-line divide-y">
+              {visible.map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(item)}
+                    className="hover:bg-surface focus-visible:outline-primary flex w-full items-center gap-3 px-3 py-2.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2"
+                  >
+                    {item.images[0] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={item.images[0].url}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-[var(--app-radius-md)] object-cover"
+                      />
+                    ) : (
+                      <span className="bg-surface text-mute flex h-12 w-12 shrink-0 items-center justify-center rounded-[var(--app-radius-md)] text-xs">
+                        Note
+                      </span>
+                    )}
+                    <span className="min-w-0">
+                      <span className="text-ink block truncate text-sm font-medium">
+                        {item.title}
+                      </span>
+                      <span className="text-mute block truncate text-xs">
+                        {postedOn(item.created_at)}
+                        {item.author ? ` · ${item.author.full_name}` : ''}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {items.length > pageSize ? (
+              <Pagination
+                page={current}
+                totalPages={totalPages}
+                total={items.length}
+                pageSize={pageSize}
+                onPageChange={setPage}
+              />
+            ) : null}
+          </>
         ) : null}
       </div>
-
-      {!ready ? <p className="text-mute text-sm">Loading announcements…</p> : null}
-
-      {ready && !latest ? <p className="text-mute text-sm">No announcements yet.</p> : null}
-
-      {latest ? (
-        <button
-          type="button"
-          onClick={() => setOpen(latest)}
-          className={`${cardClass} hover:border-primary/30 focus-visible:outline-primary overflow-hidden text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2`}
-        >
-          {latest.images[0] ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={latest.images[0].url} alt="" className="h-52 w-full object-cover" />
-          ) : null}
-          <div className="flex flex-col gap-1.5 p-5">
-            <p className="text-mute text-xs">
-              {postedOn(latest.created_at)}
-              {latest.author ? ` · ${latest.author.full_name}` : ''}
-            </p>
-            <h3 className="text-ink text-lg font-semibold">{latest.title}</h3>
-            {latest.body ? (
-              <p className="text-mute line-clamp-3 text-sm leading-relaxed">{latest.body}</p>
-            ) : (
-              <p className="text-mute text-sm">
-                {latest.images.length} {latest.images.length === 1 ? 'photo' : 'photos'}
-              </p>
-            )}
-          </div>
-        </button>
-      ) : null}
-
-      {visibleOlder.length > 0 ? (
-        <ul className={`${cardClass} divide-line divide-y overflow-hidden`}>
-          {visibleOlder.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                onClick={() => setOpen(item)}
-                className="hover:bg-surface focus-visible:outline-primary flex w-full items-center gap-3 px-3 py-2.5 text-left focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2"
-              >
-                {item.images[0] ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={item.images[0].url}
-                    alt=""
-                    className="h-12 w-12 shrink-0 rounded-[var(--app-radius-md)] object-cover"
-                  />
-                ) : (
-                  <span className="bg-surface text-mute flex h-12 w-12 shrink-0 items-center justify-center rounded-[var(--app-radius-md)] text-xs">
-                    Note
-                  </span>
-                )}
-                <span className="min-w-0">
-                  <span className="text-ink block truncate text-sm font-medium">{item.title}</span>
-                  <span className="text-mute block text-xs">{postedOn(item.created_at)}</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
 
       {open ? <AnnouncementDialog item={open} onClose={() => setOpen(null)} /> : null}
     </section>

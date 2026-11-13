@@ -11,7 +11,7 @@ import {
   formPanelClass,
   labelClass,
 } from '@/components/page-frame';
-import { Notice } from '@/components/widgets';
+import { Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import { AnnouncementDialog, postedOn, type Announcement } from '@/components/announcements';
 
@@ -40,6 +40,7 @@ export default function AnnouncementsPage() {
   const [images, setImages] = useState<DraftImage[]>([]);
   const [editing, setEditing] = useState<string | null>(null);
   const [preview, setPreview] = useState<Announcement | null>(null);
+  const [listPage, setListPage] = useState(1);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
@@ -143,6 +144,11 @@ export default function AnnouncementsPage() {
     setImages(item.images.map((image) => ({ key: image.id, url: image.url, preview: image.url })));
   }
 
+  const pageSize = 5;
+  const listPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const listCurrent = Math.min(listPage, listPages);
+  const visibleItems = items.slice((listCurrent - 1) * pageSize, listCurrent * pageSize);
+
   return (
     <PageFrame
       title="Announcements"
@@ -229,42 +235,61 @@ export default function AnnouncementsPage() {
         </div>
       </form>
 
-      <div className="flex flex-col gap-3">
-        {items.map((item) => (
-          <article key={item.id} className={`${cardClass} flex flex-wrap items-center gap-4 p-4`}>
-            {item.images[0] ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={item.images[0].url}
-                alt=""
-                className="h-16 w-16 rounded-[var(--app-radius-md)] object-cover"
-              />
-            ) : null}
-            <div className="min-w-0 flex-1">
-              <h3 className="text-ink truncate text-sm font-semibold">{item.title}</h3>
-              <p className="text-mute text-xs">{postedOn(item.created_at)}</p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className={buttonSecondaryClass}
-                onClick={() => setPreview(item)}
-              >
-                View
-              </button>
-              <button
-                type="button"
-                className={buttonSecondaryClass}
-                onClick={() => startEdit(item)}
-              >
-                Edit
-              </button>
-              <button type="button" className={buttonDangerClass} onClick={() => remove(item.id)}>
-                Remove
-              </button>
-            </div>
-          </article>
-        ))}
+      <div className={`${cardClass} overflow-hidden`}>
+        {visibleItems.length === 0 ? (
+          <p className="text-mute px-5 py-6 text-sm">No announcements yet.</p>
+        ) : (
+          <ul className="divide-line divide-y">
+            {visibleItems.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center gap-4 px-4 py-3">
+                {item.images[0] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.images[0].url}
+                    alt=""
+                    className="h-14 w-14 rounded-[var(--app-radius-md)] object-cover"
+                  />
+                ) : null}
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-ink truncate text-sm font-semibold">{item.title}</h3>
+                  <p className="text-mute text-xs">{postedOn(item.created_at)}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={buttonSecondaryClass}
+                    onClick={() => setPreview(item)}
+                  >
+                    View
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonSecondaryClass}
+                    onClick={() => startEdit(item)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonDangerClass}
+                    onClick={() => remove(item.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        {items.length > pageSize ? (
+          <Pagination
+            page={listCurrent}
+            totalPages={listPages}
+            total={items.length}
+            pageSize={pageSize}
+            onPageChange={setListPage}
+          />
+        ) : null}
       </div>
 
       {preview ? <AnnouncementDialog item={preview} onClose={() => setPreview(null)} /> : null}

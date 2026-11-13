@@ -110,22 +110,22 @@ async function sendViaResend(input: {
 export type PasswordResetEmail = {
   to: string;
   loginEmail: string;
-  newPassword: string;
+  code: string;
   idempotencyKey?: string;
 };
 
 export async function sendPasswordResetEmail(input: PasswordResetEmail): Promise<void> {
   const from = defaultFrom();
-  const subject = `${appName()} — your new password`;
+  const subject = `${appName()} — password reset code`;
   const text = [
     `Hello,`,
     ``,
-    `A new password was requested for ${appName()}.`,
+    `A password reset was requested for ${appName()}.`,
     ``,
     `Company email: ${input.loginEmail}`,
-    `New password: ${input.newPassword}`,
+    `Reset code: ${input.code}`,
     ``,
-    `Sign in and change this password from your profile when you can.`,
+    `This code expires in 10 minutes. Enter it on the sign-in page, then choose a new password.`,
     ``,
     `If you did not request this, contact your HR administrator.`,
   ].join('\n');
@@ -137,8 +137,8 @@ export async function sendPasswordResetEmail(input: PasswordResetEmail): Promise
       );
     }
     console.info(
-      `[mail:dev] Password reset for ${input.loginEmail} → ${input.to}\n` +
-        `New password: ${input.newPassword}`,
+      `[mail:dev] Password reset code for ${input.loginEmail} → ${input.to}\n` +
+        `Reset code: ${input.code}`,
     );
     return;
   }

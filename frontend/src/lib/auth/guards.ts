@@ -6,6 +6,8 @@ const PUBLIC_PATHS = new Set([
   '/api/auth/refresh',
   '/api/auth/logout',
   '/api/auth/forgot-password',
+  '/api/auth/forgot-password/verify',
+  '/api/auth/forgot-password/complete',
   '/api/company/branding',
 ]);
 

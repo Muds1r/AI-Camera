@@ -1,12 +1,12 @@
 import bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
-import { forgotPassword } from './auth.service';
+import { completePasswordReset, forgotPassword, verifyPasswordResetCode } from './auth.service';
 
-const sent: { to: string; loginEmail: string; newPassword: string }[] = [];
+const sent: { to: string; loginEmail: string; code: string }[] = [];
 
 jest.mock('../lib/mail', () => ({
   sendPasswordResetEmail: jest.fn(
-    async (input: { to: string; loginEmail: string; newPassword: string }) => {
+    async (input: { to: string; loginEmail: string; code: string }) => {
       sent.push(input);
     },
   ),
@@ -33,14 +33,33 @@ interface FakeToken {
   revoked_at: Date | null;
 }
 
+interface FakeReset {
+  id: string;
+  user_id: string;
+  code_hash: string;
+  token_hash: string | null;
+  attempts: number;
+  expires_at: Date;
+  used_at: Date | null;
+  created_at: Date;
+}
+
 function state() {
-  return (globalThis as { __forgotState?: { users: FakeUser[]; tokens: FakeToken[] } })
-    .__forgotState!;
+  return (
+    globalThis as {
+      __forgotState?: { users: FakeUser[]; tokens: FakeToken[]; resets: FakeReset[] };
+    }
+  ).__forgotState!;
 }
 
 jest.mock('../lib/prisma', () => {
   const db = () =>
-    (globalThis as { __forgotState?: { users: FakeUser[]; tokens: FakeToken[] } }).__forgotState!;
+    (
+      globalThis as {
+        __forgotState?: { users: FakeUser[]; tokens: FakeToken[]; resets: FakeReset[] };
+      }
+    ).__forgotState!;
+  let resetSeq = 0;
   const prisma = {
     user: {
       findUnique: async ({
@@ -93,18 +112,103 @@ jest.mock('../lib/prisma', () => {
         return { count };
       },
     },
+    passwordReset: {
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { user_id: string; used_at: null };
+        data: { used_at: Date };
+      }) => {
+        for (const reset of db().resets) {
+          if (reset.user_id === where.user_id && reset.used_at === null)
+            reset.used_at = data.used_at;
+        }
+        return { count: 1 };
+      },
+      create: async ({
+        data,
+      }: {
+        data: { user_id: string; code_hash: string; expires_at: Date };
+      }) => {
+        const reset: FakeReset = {
+          id: `r${++resetSeq}`,
+          user_id: data.user_id,
+          code_hash: data.code_hash,
+          token_hash: null,
+          attempts: 0,
+          expires_at: data.expires_at,
+          used_at: null,
+          created_at: new Date(),
+        };
+        db().resets.push(reset);
+        return reset;
+      },
+      update: async ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: {
+          used_at?: Date;
+          token_hash?: string;
+          expires_at?: Date;
+          attempts?: { increment: number };
+        };
+      }) => {
+        const reset = db().resets.find((row) => row.id === where.id);
+        if (!reset) throw new Error('missing reset');
+        if (data.used_at) reset.used_at = data.used_at;
+        if (data.token_hash) reset.token_hash = data.token_hash;
+        if (data.expires_at) reset.expires_at = data.expires_at;
+        if (data.attempts?.increment) reset.attempts += data.attempts.increment;
+        return reset;
+      },
+      findFirst: async ({
+        where,
+      }: {
+        where: {
+          user_id?: string;
+          used_at?: null;
+          token_hash?: string | null;
+          expires_at?: { gt: Date };
+        };
+      }) => {
+        const rows = db()
+          .resets.filter((reset) => {
+            if (where.user_id && reset.user_id !== where.user_id) return false;
+            if (where.used_at === null && reset.used_at !== null) return false;
+            if (where.token_hash === null && reset.token_hash !== null) return false;
+            if (typeof where.token_hash === 'string' && reset.token_hash !== where.token_hash) {
+              return false;
+            }
+            if (where.expires_at && reset.expires_at <= where.expires_at.gt) return false;
+            return true;
+          })
+          .sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+        return rows[0] ?? null;
+      },
+    },
+    loginEvent: {
+      create: async () => ({ id: 'event' }),
+    },
   };
   return { prisma };
 });
 
 beforeEach(() => {
   sent.length = 0;
-  (globalThis as { __forgotState?: { users: FakeUser[]; tokens: FakeToken[] } }).__forgotState = {
+  (
+    globalThis as {
+      __forgotState?: { users: FakeUser[]; tokens: FakeToken[]; resets: FakeReset[] };
+    }
+  ).__forgotState = {
     users: [],
     tokens: [
       { id: 't1', user_id: 'u1', revoked_at: null },
       { id: 't2', user_id: 'u1', revoked_at: null },
     ],
+    resets: [],
   };
 });
 
@@ -125,23 +229,22 @@ async function seedUser(overrides: Partial<FakeUser> = {}) {
 }
 
 describe('forgotPassword', () => {
-  it('sends a new password only to secondary email and revokes sessions', async () => {
+  it('emails a code to the recovery address and leaves the password in place', async () => {
     await seedUser();
+    const before = state().users[0].password_hash;
     const result = await forgotPassword('login@example.com');
-    expect(result.message).toMatch(/recovery email/i);
+    expect(result.message).toMatch(/sign-in code/i);
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe('recovery@example.com');
     expect(sent[0].loginEmail).toBe('login@example.com');
-    expect(sent[0].newPassword.length).toBeGreaterThanOrEqual(8);
-
-    const user = state().users[0];
-    expect(await bcrypt.compare(sent[0].newPassword, user.password_hash)).toBe(true);
-    expect(state().tokens.every((token) => token.revoked_at)).toBe(true);
+    expect(sent[0].code).toMatch(/^\d{6}$/);
+    expect(state().users[0].password_hash).toBe(before);
+    expect(state().tokens.every((token) => token.revoked_at === null)).toBe(true);
   });
 
   it('returns the same message when the login email is unknown', async () => {
     const result = await forgotPassword('missing@example.com');
-    expect(result.message).toMatch(/recovery email/i);
+    expect(result.message).toMatch(/sign-in code/i);
     expect(sent).toHaveLength(0);
   });
 
@@ -155,5 +258,24 @@ describe('forgotPassword', () => {
     state().users[0].secondary_email = null;
     await forgotPassword('login@example.com');
     expect(sent).toHaveLength(0);
+  });
+
+  it('saves a new password only after the code is confirmed', async () => {
+    await seedUser();
+    await forgotPassword('login@example.com');
+    await expect(verifyPasswordResetCode('login@example.com', '000000')).rejects.toThrow(
+      /not valid/i,
+    );
+
+    const verified = await verifyPasswordResetCode('login@example.com', sent[0].code);
+    expect(verified.resetToken.length).toBeGreaterThan(10);
+
+    const saved = await completePasswordReset(verified.resetToken, 'new-password1');
+    expect(saved.message).toMatch(/sign in/i);
+    expect(await bcrypt.compare('new-password1', state().users[0].password_hash)).toBe(true);
+    expect(state().tokens.every((token) => token.revoked_at)).toBe(true);
+    await expect(completePasswordReset(verified.resetToken, 'another-password1')).rejects.toThrow(
+      /expired/i,
+    );
   });
 });

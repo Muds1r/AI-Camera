@@ -35,21 +35,18 @@ describe('attendance payslip', () => {
     expect(slip.lopAmount).toBe(0);
   });
 
-  it('cuts one daily rate for each absence and unpaid leave day', () => {
+  it('cuts one daily rate for each unpaid leave day', () => {
     const dates = month(22);
-    const attendance = Object.fromEntries(
-      dates.slice(0, 20).map((day) => [day.key, 'present' as const]),
-    );
     const days = summarizePayDays({
       dates,
       today: '2026-11-22',
       joinedOn: null,
-      attendance,
+      attendance: {},
       paidLeave: [],
       unpaidLeave: ['2026-11-21'],
     });
     expect(days.unpaidLeave).toBe(1);
-    expect(days.absent).toBe(1);
+    expect(days.absent).toBe(0);
     const slip = calculatePayslip({
       basic: 100000,
       allowance: 0,
@@ -64,9 +61,9 @@ describe('attendance payslip', () => {
       opd: 0,
     });
     expect(slip.perDay).toBe(4545.45);
-    expect(slip.lopDays).toBe(2);
-    expect(slip.lopAmount).toBe(9090.91);
-    expect(slip.net).toBe(90909.09);
+    expect(slip.lopDays).toBe(1);
+    expect(slip.lopAmount).toBe(4545.45);
+    expect(slip.net).toBe(95454.55);
   });
 
   it('adds approved claims and overtime at 1.5 times the hourly rate', () => {

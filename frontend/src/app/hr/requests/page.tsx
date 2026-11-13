@@ -13,10 +13,11 @@ import {
   tabIdleClass,
   linkMutedClass,
 } from '@/components/page-frame';
-import { Badge, ConfirmDialog, Notice } from '@/components/widgets';
+import { Badge, ConfirmDialog, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { usePaged } from '@/lib/use-paged';
 
-type Tab = 'medical' | 'opd' | 'leave' | 'profile' | 'overtime' | 'attendance';
+type Tab = 'medical' | 'opd' | 'leave' | 'profile' | 'overtime';
 
 function parseTab(value: string | null): Tab {
   if (
@@ -24,8 +25,7 @@ function parseTab(value: string | null): Tab {
     value === 'leave' ||
     value === 'profile' ||
     value === 'medical' ||
-    value === 'overtime' ||
-    value === 'attendance'
+    value === 'overtime'
   ) {
     return value;
   }
@@ -73,7 +73,6 @@ function profileChangeDetail(changes: Record<string, string | null>) {
 const TABS: { id: Tab; label: string }[] = [
   { id: 'leave', label: 'Leave' },
   { id: 'overtime', label: 'Overtime' },
-  { id: 'attendance', label: 'Attendance' },
   { id: 'profile', label: 'Profile updates' },
   { id: 'medical', label: 'Filed medical' },
   { id: 'opd', label: 'Filed OPD' },
@@ -102,6 +101,7 @@ function ApprovalsPageContent() {
     null,
   );
   const [note, setNote] = useState('');
+  const queue = usePaged(rows, 6, `${tab}|${status}|${query}|${from}|${to}`);
 
   function load(next = tab, filters = { query, status, from, to }) {
     const params = new URLSearchParams({ scope: 'queue' });
@@ -184,33 +184,6 @@ function ApprovalsPageContent() {
         ),
       );
     }
-    if (next === 'attendance') {
-      return apiJson<{
-        requests: {
-          id: string;
-          status: string;
-          requested_status: string;
-          reason: string;
-          review_note: string | null;
-          work_date: string;
-          clock_in: string | null;
-          clock_out: string | null;
-          requester: { full_name: string };
-        }[];
-      }>(`/api/attendance-corrections?${params}`).then((data) =>
-        setRows(
-          data.requests.map((item) => ({
-            id: item.id,
-            status: item.status,
-            title: `${item.requester.full_name} · ${item.requested_status.replace('_', ' ')}`,
-            detail: `${item.work_date.slice(0, 10)} · ${item.reason}${
-              item.clock_in ? ` · in ${new Date(item.clock_in).toLocaleTimeString()}` : ''
-            }${item.clock_out ? ` · out ${new Date(item.clock_out).toLocaleTimeString()}` : ''}`,
-            review_note: item.review_note,
-          })),
-        ),
-      );
-    }
     return apiJson<{
       requests: {
         id: string;
@@ -250,9 +223,7 @@ function ApprovalsPageContent() {
           ? `/api/leave/${pending.id}`
           : tab === 'overtime'
             ? `/api/overtime/${pending.id}`
-            : tab === 'attendance'
-              ? `/api/attendance-corrections/${pending.id}`
-              : `/api/profile-requests/${pending.id}`;
+            : `/api/profile-requests/${pending.id}`;
     try {
       await apiJson(path, {
         method: 'PATCH',
@@ -270,7 +241,7 @@ function ApprovalsPageContent() {
   return (
     <PageFrame
       title="Requests & Approvals"
-      description="Leave, overtime, attendance, and profile updates. Filed medical and OPD are claims finance submitted for a worker. Employees file their own medical and OPD with Finance."
+      description="Leave, overtime, and profile updates. Finance medical and OPD are claims finance staff filed for themselves. HR files their own medical and OPD, and Finance approves those."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
@@ -342,7 +313,7 @@ function ApprovalsPageContent() {
         <p className="text-mute text-sm">No requests match these filters.</p>
       ) : null}
       <ul className="space-y-2">
-        {rows.map((row) => (
+        {queue.slice.map((row) => (
           <li key={row.id} className={`${cardClass} p-4 text-sm`}>
             <div className="flex items-center justify-between gap-3">
               <p className="font-medium">{row.title}</p>
@@ -382,6 +353,15 @@ function ApprovalsPageContent() {
           </li>
         ))}
       </ul>
+      {queue.showPager ? (
+        <Pagination
+          page={queue.page}
+          totalPages={queue.totalPages}
+          total={queue.total}
+          pageSize={queue.pageSize}
+          onPageChange={queue.setPage}
+        />
+      ) : null}
       <ConfirmDialog
         open={Boolean(pending)}
         title={pending?.status === 'rejected' ? 'Reject this request?' : 'Approve this request?'}

@@ -1,8 +1,8 @@
-import { randomUUID } from 'crypto';
+import { randomInt, randomUUID } from 'crypto';
 import { Role, User } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
-import { verifyPassword, verifyPasswordAgainstDummy } from '../lib/auth/passwords';
+import { hashPassword, verifyPassword, verifyPasswordAgainstDummy } from '../lib/auth/passwords';
 import {
   generateRefreshToken,
   hashRefreshToken,
@@ -11,9 +11,7 @@ import {
 } from '../lib/auth/tokens';
 import { parseRememberMe } from '../lib/auth/cookies';
 import { writeAudit } from '../lib/audit';
-import { generateCompliantPassword } from '../lib/auth/generate-password';
-import { hashPassword } from '../lib/auth/passwords';
-import { assertEmail, PublicUser, toPublicUser } from '../lib/auth/users';
+import { assertEmail, assertPassword, PublicUser, toPublicUser } from '../lib/auth/users';
 import { sendPasswordResetEmail } from '../lib/mail';
 import { FORGOT_PASSWORD_SUCCESS_MESSAGE } from '../lib/auth/forgot-password-rate-limit';
 
@@ -211,6 +209,14 @@ export async function replaceSessionAfterPasswordChange(userId: string): Promise
   return issueSession(user);
 }
 
+const OTP_TTL_MS = 10 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+const MAX_OTP_ATTEMPTS = 5;
+
+function resetCode(): string {
+  return randomInt(0, 1_000_000).toString().padStart(6, '0');
+}
+
 export async function forgotPassword(email: unknown): Promise<{ message: string }> {
   if (typeof email !== 'string' || !email.trim()) {
     throw new HttpError(400, 'Email is required');
@@ -223,41 +229,128 @@ export async function forgotPassword(email: unknown): Promise<{ message: string 
       id: true,
       email: true,
       is_active: true,
+      login_enabled: true,
       secondary_email: true,
     },
   });
 
-  if (!user?.is_active || !user.secondary_email) {
+  if (!user?.is_active || user.login_enabled === false || !user.secondary_email) {
     return { message: FORGOT_PASSWORD_SUCCESS_MESSAGE };
   }
 
   const recoveryTo = assertEmail(user.secondary_email);
-  const newPassword = generateCompliantPassword();
-
-  const idempotencyKey = `password-reset/${user.id}/${randomUUID()}`;
+  const code = resetCode();
+  await prisma.passwordReset.updateMany({
+    where: { user_id: user.id, used_at: null },
+    data: { used_at: new Date() },
+  });
+  const created = await prisma.passwordReset.create({
+    data: {
+      user_id: user.id,
+      code_hash: hashRefreshToken(code),
+      expires_at: new Date(Date.now() + OTP_TTL_MS),
+    },
+  });
 
   try {
     await sendPasswordResetEmail({
       to: recoveryTo,
       loginEmail: user.email,
-      newPassword,
-      idempotencyKey,
+      code,
+      idempotencyKey: `password-reset/${user.id}/${randomUUID()}`,
     });
   } catch (err) {
     console.error('Password reset email failed:', err);
+    await prisma.passwordReset.update({
+      where: { id: created.id },
+      data: { used_at: new Date() },
+    });
     return { message: FORGOT_PASSWORD_SUCCESS_MESSAGE };
   }
 
-  const password_hash = await hashPassword(newPassword);
+  await writeAudit(null, 'auth.forgot_password', 'user', user.id);
+  return { message: FORGOT_PASSWORD_SUCCESS_MESSAGE };
+}
+
+export async function verifyPasswordResetCode(
+  email: unknown,
+  code: unknown,
+): Promise<{ resetToken: string }> {
+  const invalid = new HttpError(400, 'That code is not valid or has expired');
+  if (typeof email !== 'string' || typeof code !== 'string' || !/^\d{6}$/.test(code.trim())) {
+    throw invalid;
+  }
+
+  const normalized = assertEmail(email);
+  const user = await prisma.user.findUnique({
+    where: { email: normalized },
+    select: { id: true, is_active: true, login_enabled: true },
+  });
+  if (!user?.is_active || user.login_enabled === false) throw invalid;
+
+  const reset = await prisma.passwordReset.findFirst({
+    where: {
+      user_id: user.id,
+      used_at: null,
+      token_hash: null,
+      expires_at: { gt: new Date() },
+    },
+    orderBy: { created_at: 'desc' },
+  });
+  if (!reset || reset.attempts >= MAX_OTP_ATTEMPTS) throw invalid;
+
+  if (hashRefreshToken(code.trim()) !== reset.code_hash) {
+    await prisma.passwordReset.update({
+      where: { id: reset.id },
+      data: { attempts: { increment: 1 } },
+    });
+    throw invalid;
+  }
+
+  const resetToken = generateRefreshToken();
+  await prisma.passwordReset.update({
+    where: { id: reset.id },
+    data: {
+      token_hash: hashRefreshToken(resetToken),
+      expires_at: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+    },
+  });
+  return { resetToken };
+}
+
+export async function completePasswordReset(
+  token: unknown,
+  password: unknown,
+): Promise<{ message: string }> {
+  if (typeof token !== 'string' || !token) {
+    throw new HttpError(400, 'Reset session expired. Request a new code.');
+  }
+  if (typeof password !== 'string') throw new HttpError(400, 'Password is required');
+  assertPassword(password);
+
+  const reset = await prisma.passwordReset.findFirst({
+    where: { token_hash: hashRefreshToken(token), used_at: null, expires_at: { gt: new Date() } },
+  });
+  if (!reset) throw new HttpError(400, 'Reset session expired. Request a new code.');
+
+  const password_hash = await hashPassword(password);
   await prisma.user.update({
-    where: { id: user.id },
+    where: { id: reset.user_id },
     data: { password_hash, password_changed_at: new Date() },
   });
-  await revokeAllRefreshTokens(user.id);
-  await writeAudit(null, 'auth.forgot_password', 'user', user.id);
-  await recordLogin(user.email, 'password_reset', user.id);
+  await prisma.passwordReset.update({
+    where: { id: reset.id },
+    data: { used_at: new Date() },
+  });
+  await revokeAllRefreshTokens(reset.user_id);
 
-  return { message: FORGOT_PASSWORD_SUCCESS_MESSAGE };
+  const owner = await prisma.user.findUnique({
+    where: { id: reset.user_id },
+    select: { email: true },
+  });
+  await writeAudit(null, 'auth.password_reset', 'user', reset.user_id);
+  await recordLogin(owner?.email ?? 'unknown', 'password_reset', reset.user_id);
+  return { message: 'Password saved. Sign in with your new password.' };
 }
 
 export async function listSessions(userId: string, currentToken: string | undefined) {

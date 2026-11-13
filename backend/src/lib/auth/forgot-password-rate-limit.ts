@@ -26,4 +26,4 @@ export function isForgotPasswordRateLimited(key: string): boolean {
 }
 
 export const FORGOT_PASSWORD_SUCCESS_MESSAGE =
-  'If an account exists with a recovery email on file, a new password was sent there.';
+  'If an account exists with a recovery email on file, a sign-in code was sent there.';

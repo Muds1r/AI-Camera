@@ -9,6 +9,7 @@ import { PasswordField } from '@/components/password-field';
 import { buttonClass, cardClass, fieldClass, labelClass } from '@/components/page-frame';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { notifyError, notifySuccess } from '@/components/toast';
+import { passwordError } from '@/lib/fields';
 
 type LoginErrorBody = {
   error?: string;
@@ -17,13 +18,19 @@ type LoginErrorBody = {
   message?: string;
 };
 
+type ResetStep = 'sign-in' | 'forgot' | 'code' | 'password';
+
 export function LoginForm() {
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<'sign-in' | 'forgot'>('sign-in');
+  const [mode, setMode] = useState<ResetStep>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [nextPassword, setNextPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [resetNote, setResetNote] = useState('');
   const [pending, setPending] = useState(false);
@@ -93,13 +100,83 @@ export function LoginForm() {
       }
       setResetNote(
         data?.message ||
-          'If an account exists with a recovery email on file, a new password was sent there.',
+          'If an account exists with a recovery email on file, a sign-in code was sent there.',
       );
+      setCode('');
+      setMode('code');
     } catch {
       setError('Could not reach the server');
     } finally {
       setPending(false);
     }
+  }
+
+  async function onVerifyCode(event: FormEvent) {
+    event.preventDefault();
+    setError('');
+    setPending(true);
+    try {
+      const response = await fetch('/api/auth/forgot-password/verify', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: resetEmail, code: code.trim() }),
+      });
+      const data = (await response.json().catch(() => null)) as
+        (LoginErrorBody & { resetToken?: string }) | null;
+      if (!response.ok || !data?.resetToken) {
+        setError(data?.error || 'That code is not valid or has expired');
+        return;
+      }
+      setResetToken(data.resetToken);
+      setNextPassword('');
+      setConfirmPassword('');
+      setMode('password');
+    } catch {
+      setError('Could not reach the server');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function onSavePassword(event: FormEvent) {
+    event.preventDefault();
+    setError('');
+    const problem =
+      passwordError(nextPassword, true) ||
+      (nextPassword === confirmPassword ? '' : 'Passwords do not match');
+    if (problem) {
+      setError(problem);
+      return;
+    }
+    setPending(true);
+    try {
+      const response = await fetch('/api/auth/forgot-password/complete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ resetToken, password: nextPassword }),
+      });
+      const data = (await response.json().catch(() => null)) as LoginErrorBody | null;
+      if (!response.ok) {
+        setError(data?.error || 'Could not save the password');
+        return;
+      }
+      setEmail(resetEmail);
+      setPassword('');
+      setMode('sign-in');
+      notifySuccess('Password saved', data?.message || 'Sign in with your new password.');
+    } catch {
+      setError('Could not reach the server');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  function backToSignIn() {
+    setResetNote('');
+    setError('');
+    setCode('');
+    setResetToken('');
+    setMode('sign-in');
   }
 
   return (
@@ -182,12 +259,14 @@ export function LoginForm() {
             {pending ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
-      ) : (
+      ) : null}
+
+      {mode === 'forgot' ? (
         <form onSubmit={onForgot} className={`${cardClass} shadow-elevated w-full max-w-sm p-8`}>
           <div className="mb-6">
             <h1 className="text-ink text-lg font-semibold tracking-tight">Reset password</h1>
             <p className="text-mute mt-1 text-sm">
-              A new password is emailed to the secondary address saved on the account.
+              A 6-digit code is emailed to the recovery address saved on the account.
             </p>
           </div>
 
@@ -201,36 +280,125 @@ export function LoginForm() {
             className={`${fieldClass} mb-4`}
           />
 
+          {error ? <FormAlert>{error}</FormAlert> : null}
+
+          <button type="submit" disabled={pending} className={`${buttonClass} w-full`}>
+            {pending ? 'Sending…' : 'Email a code'}
+          </button>
+          <button
+            type="button"
+            className="text-mute hover:text-ink mt-4 w-full text-sm font-medium"
+            onClick={backToSignIn}
+          >
+            Back to sign in
+          </button>
+        </form>
+      ) : null}
+
+      {mode === 'code' ? (
+        <form
+          onSubmit={onVerifyCode}
+          className={`${cardClass} shadow-elevated w-full max-w-sm p-8`}
+        >
+          <div className="mb-6">
+            <h1 className="text-ink text-lg font-semibold tracking-tight">Enter the code</h1>
+            <p className="text-mute mt-1 text-sm">
+              Check the recovery email for {resetEmail}. The code expires in 10 minutes.
+            </p>
+          </div>
+
           {resetNote ? (
             <p className="border-line bg-surface text-ink mb-4 rounded-lg border px-3 py-2 text-sm">
               {resetNote}
             </p>
           ) : null}
-          {error ? (
-            <p
-              className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200"
-              role="alert"
-            >
-              {error}
-            </p>
-          ) : null}
+
+          <label className={labelClass}>6-digit code</label>
+          <input
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            required
+            maxLength={6}
+            pattern="[0-9]{6}"
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            className={`${fieldClass} mb-4 tracking-[0.3em]`}
+          />
+
+          {error ? <FormAlert>{error}</FormAlert> : null}
 
           <button type="submit" disabled={pending} className={`${buttonClass} w-full`}>
-            {pending ? 'Sending…' : 'Email a new password'}
+            {pending ? 'Checking…' : 'Continue'}
           </button>
           <button
             type="button"
             className="text-mute hover:text-ink mt-4 w-full text-sm font-medium"
             onClick={() => {
-              setResetNote('');
               setError('');
-              setMode('sign-in');
+              setMode('forgot');
             }}
+          >
+            Send a new code
+          </button>
+        </form>
+      ) : null}
+
+      {mode === 'password' ? (
+        <form
+          onSubmit={onSavePassword}
+          className={`${cardClass} shadow-elevated w-full max-w-sm p-8`}
+        >
+          <div className="mb-6">
+            <h1 className="text-ink text-lg font-semibold tracking-tight">Choose a new password</h1>
+            <p className="text-mute mt-1 text-sm">
+              Use at least 8 characters, with a letter and a number.
+            </p>
+          </div>
+
+          <label className={labelClass}>New password</label>
+          <div className="mb-4">
+            <PasswordField
+              required
+              autoComplete="new-password"
+              value={nextPassword}
+              onChange={setNextPassword}
+            />
+          </div>
+          <label className={labelClass}>Confirm password</label>
+          <div className="mb-4">
+            <PasswordField
+              required
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+            />
+          </div>
+
+          {error ? <FormAlert>{error}</FormAlert> : null}
+
+          <button type="submit" disabled={pending} className={`${buttonClass} w-full`}>
+            {pending ? 'Saving…' : 'Save password'}
+          </button>
+          <button
+            type="button"
+            className="text-mute hover:text-ink mt-4 w-full text-sm font-medium"
+            onClick={backToSignIn}
           >
             Back to sign in
           </button>
         </form>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+function FormAlert({ children }: { children: string }) {
+  return (
+    <p
+      className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-800 dark:text-red-200"
+      role="alert"
+    >
+      {children}
+    </p>
   );
 }

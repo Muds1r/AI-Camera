@@ -14,9 +14,10 @@ import {
   tabBarClass,
   tabIdleClass,
 } from '@/components/page-frame';
-import { Badge, ConfirmDialog, EmptyState, Notice } from '@/components/widgets';
+import { Badge, ConfirmDialog, EmptyState, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import { documentFileError } from '@/lib/fields';
+import { usePaged } from '@/lib/use-paged';
 
 type Tab = 'medical' | 'opd';
 
@@ -61,6 +62,8 @@ function FinanceClaimsContent() {
   const [status, setStatus] = useState('pending');
   const [statusTab, setStatusTab] = useState<Tab>(tab);
   const shownStatus = statusTab === tab ? status : 'pending';
+  const ownPage = usePaged(ownClaims, 4);
+  const reviewPage = usePaged(claims, 6, `${tab}|${shownStatus}`);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState<{ id: string; status: 'approved' | 'rejected' } | null>(
@@ -162,7 +165,7 @@ function FinanceClaimsContent() {
   return (
     <PageFrame
       title="Claims"
-      description="Approve medical and OPD claims an employee filed. To record a claim for a worker who has no login, file it here. HR approves those."
+      description="Medical and OPD requests employees and HR filed. A claim you save for a worker is approved immediately. Your own claim still goes to HR."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
@@ -242,6 +245,29 @@ function FinanceClaimsContent() {
         </button>
       </form>
 
+      {ownClaims.length > 0 ? (
+        <ul className="divide-line divide-y">
+          {ownPage.slice.map((claim) => (
+            <li key={claim.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+              <span>
+                Your claim · {claim.amount}
+                <span className="text-mute block text-xs">{claim.reason}</span>
+              </span>
+              <Badge status={claim.status} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {ownPage.showPager ? (
+        <Pagination
+          page={ownPage.page}
+          totalPages={ownPage.totalPages}
+          total={ownPage.total}
+          pageSize={ownPage.pageSize}
+          onPageChange={ownPage.setPage}
+        />
+      ) : null}
+
       <div className="flex flex-wrap gap-2">
         <select
           className={`${fieldClass} max-w-40`}
@@ -263,7 +289,7 @@ function FinanceClaimsContent() {
         <EmptyState>No claims in this list.</EmptyState>
       ) : (
         <ul className="divide-line divide-y">
-          {claims.map((claim) => (
+          {reviewPage.slice.map((claim) => (
             <li key={claim.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
               <div className="min-w-0">
                 <p className="text-ink text-sm font-medium">
@@ -304,6 +330,15 @@ function FinanceClaimsContent() {
           ))}
         </ul>
       )}
+      {reviewPage.showPager ? (
+        <Pagination
+          page={reviewPage.page}
+          totalPages={reviewPage.totalPages}
+          total={reviewPage.total}
+          pageSize={reviewPage.pageSize}
+          onPageChange={reviewPage.setPage}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(pending)}
