@@ -12,8 +12,8 @@ import { writeAudit } from '../lib/audit';
 import {
   notifyBenefitDecided,
   notifyBenefitFiler,
-  notifyBenefitOnBehalf,
   notifyBenefitSubmitted,
+  notifyFinanceOwnSubmitted,
   notifyLeaveDecided,
   notifyLeaveSubmitted,
   notifyOvertimeDecided,
@@ -617,6 +617,19 @@ export async function submitBenefit(
     }
     documentUrl = input.document_url;
   }
+  if (options?.submittedBy) {
+    const owner = await prisma.user.findUnique({ where: { id: userId } });
+    if (!owner) throw new HttpError(404, 'Employee not found');
+    const approved = await prisma.medicalRequest.aggregate({
+      where: { user_id: userId, kind: input.kind, status: MedicalRequestStatus.approved },
+      _sum: { amount: true },
+    });
+    const spent = approved._sum.amount ?? 0;
+    const limit = input.kind === BenefitKind.opd ? owner.opd_limit : owner.medical_limit;
+    if (spent + amount > limit) {
+      throw new HttpError(409, 'This amount exceeds the remaining balance');
+    }
+  }
   const request = await prisma.medicalRequest.create({
     data: {
       user_id: userId,
@@ -625,6 +638,13 @@ export async function submitBenefit(
       reason: input.reason.trim(),
       document_url: documentUrl,
       submitted_by: options?.submittedBy ?? null,
+      ...(options?.submittedBy
+        ? {
+            status: MedicalRequestStatus.approved,
+            reviewed_by: options.submittedBy,
+            reviewed_at: new Date(),
+          }
+        : {}),
     },
     include: benefitInclude,
   });
@@ -636,15 +656,17 @@ export async function submitBenefit(
     input.kind,
   );
   if (options?.submittedBy) {
-    const filer = await prisma.user.findUnique({
-      where: { id: options.submittedBy },
-      select: { full_name: true },
+    await notifyBenefitDecided({
+      userId,
+      kind: request.kind,
+      amount: request.amount,
+      status: 'approved',
+      reviewNote: null,
     });
-    await notifyBenefitOnBehalf({
-      actorId: options.submittedBy,
-      filerName: filer?.full_name ?? 'Finance',
-      employeeId: userId,
-      employeeName: request.requester.full_name,
+  } else if (request.requester.role === Role.finance) {
+    await notifyFinanceOwnSubmitted({
+      actorId: userId,
+      requesterName: request.requester.full_name,
       kind: request.kind,
       amount: request.amount,
       reason: request.reason,
@@ -684,6 +706,16 @@ export async function submitBenefitFor(
   return submitBenefit(owner.id, input, { submittedBy: actor.id });
 }
 
+const hrBenefitQueue: Prisma.MedicalRequestWhereInput = {
+  submitted_by: null,
+  requester: { role: Role.finance },
+};
+
+const financeBenefitQueue: Prisma.MedicalRequestWhereInput = {
+  submitted_by: null,
+  requester: { role: { not: Role.finance } },
+};
+
 export async function listBenefits(
   actor: AuthUser,
   scope: unknown,
@@ -700,7 +732,7 @@ export async function listBenefits(
   }
   return prisma.medicalRequest.findMany({
     where: {
-      ...(queue ? { submitted_by: behalf ? { not: null } : null } : { user_id: actor.id }),
+      ...(queue ? (behalf ? hrBenefitQueue : financeBenefitQueue) : { user_id: actor.id }),
       ...(kind === BenefitKind.medical || kind === BenefitKind.opd ? { kind } : {}),
       ...requestFilters(filters.status, filters.q, filters.from, filters.to),
     },
@@ -722,17 +754,17 @@ export async function reviewBenefit(
   const request = await prisma.medicalRequest.findUnique({ where: { id } });
   if (!request) throw new HttpError(404, 'Request not found');
   if (request.user_id === actor.id) throw new HttpError(403, 'You cannot review your own request');
-  const onBehalf = Boolean(request.submitted_by);
-  if (onBehalf && !roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf)) {
-    throw new HttpError(403, 'HR reviews claims that finance filed for a worker');
+  const owner = await prisma.user.findUnique({ where: { id: request.user_id } });
+  if (!owner) throw new HttpError(404, 'Employee not found');
+  const hrQueue = Boolean(request.submitted_by) || owner.role === Role.finance;
+  if (hrQueue && !roleHasPermission(actor.role, Permission.MedicalReviewOnBehalf)) {
+    throw new HttpError(403, 'HR reviews claims filed for a worker and finance staff claims');
   }
-  if (!onBehalf && !roleHasPermission(actor.role, Permission.MedicalReview)) {
-    throw new HttpError(403, 'Finance reviews claims an employee filed');
+  if (!hrQueue && !roleHasPermission(actor.role, Permission.MedicalReview)) {
+    throw new HttpError(403, 'Finance reviews claims an employee or HR filed');
   }
   if (request.status !== MedicalRequestStatus.pending)
     throw new HttpError(409, 'This request has already been reviewed');
-  const owner = await prisma.user.findUnique({ where: { id: request.user_id } });
-  if (!owner) throw new HttpError(404, 'Employee not found');
   if (status === MedicalRequestStatus.approved) {
     const approved = await prisma.medicalRequest.aggregate({
       where: { user_id: owner.id, kind: request.kind, status: MedicalRequestStatus.approved },
@@ -760,6 +792,7 @@ export async function reviewBenefit(
     amount: updated.amount,
     status,
     reviewNote: updated.review_note,
+    ...(owner.role === Role.finance ? { audience: 'finance' as const } : {}),
   });
   if (request.submitted_by && request.submitted_by !== updated.user_id) {
     await notifyBenefitFiler({
@@ -1327,7 +1360,10 @@ export async function updateEmployment(
     data[key] = parsed;
   }
   if (input.clock_enabled !== undefined) data.clock_enabled = Boolean(input.clock_enabled);
-  if (input.login_enabled !== undefined) data.login_enabled = Boolean(input.login_enabled);
+  if (input.login_enabled !== undefined) {
+    const turningOff = input.login_enabled === false && target.login_enabled;
+    if (!turningOff) data.login_enabled = Boolean(input.login_enabled);
+  }
   if (input.shift === 'day' || input.shift === 'night') data.shift = input.shift;
   if (input.employment_status === 'active' || input.employment_status === 'resigned') {
     data.employment_status = input.employment_status;
@@ -1469,10 +1505,20 @@ export async function dashboardFor(actor: AuthUser) {
   if (actor.role === Role.finance) {
     const [pendingMedical, pendingOpd] = await Promise.all([
       prisma.medicalRequest.count({
-        where: { status: 'pending', submitted_by: null, kind: BenefitKind.medical },
+        where: {
+          status: 'pending',
+          submitted_by: null,
+          kind: BenefitKind.medical,
+          requester: { role: { not: Role.finance } },
+        },
       }),
       prisma.medicalRequest.count({
-        where: { status: 'pending', submitted_by: null, kind: BenefitKind.opd },
+        where: {
+          status: 'pending',
+          submitted_by: null,
+          kind: BenefitKind.opd,
+          requester: { role: { not: Role.finance } },
+        },
       }),
     ]);
     return { ...base, personal, finance: { pendingMedical, pendingOpd } };
@@ -1499,6 +1545,7 @@ export async function dashboardFor(actor: AuthUser) {
     prisma.medicalRequest.count({
       where: { status: 'pending', kind: BenefitKind.opd, ...hrBenefitQueue },
     }),
+    prisma.medicalRequest.count({ where: { status: 'pending', ...hrBenefitQueue } }),
     prisma.leaveRequest.count({ where: { status: 'pending' } }),
     prisma.profileUpdateRequest.count({ where: { status: 'pending' } }),
     prisma.overtimeRequest.count({ where: { status: 'pending' } }),

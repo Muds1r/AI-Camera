@@ -61,14 +61,53 @@ export function HrWorkspaceDashboard({ hr }: { hr: HrDashboardSlice }) {
     opd: hr.pendingOpd,
   };
 
-  return (
-    <section className="flex flex-col gap-4">
-      <div className="flex min-h-8 items-center justify-between gap-3">
-        <h2 className="text-display text-ink text-base font-semibold">Pending approvals</h2>
-        <Link href="/hr/requests" className={linkMutedClass}>
-          Open queue
-        </Link>
-      </div>
+          <Card
+            title="Pending approvals"
+            action={
+              <Link href="/hr/requests" className={linkMutedClass}>
+                Review
+              </Link>
+            }
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-mute text-sm leading-relaxed">
+                  Leave, overtime, attendance, and profile updates, plus medical and OPD claims from
+                  finance staff. Employees and HR send their own medical and OPD claims to Finance.
+                </p>
+                <ul className="text-mute mt-3 space-y-1.5 text-xs">
+                  <li className="flex justify-between gap-4">
+                    <span>Finance medical &amp; OPD</span>
+                    <span className="text-ink font-semibold tabular-nums">{hr.pendingMedical}</span>
+                  </li>
+                  <li className="flex justify-between gap-4">
+                    <span>Leave</span>
+                    <span className="text-ink font-semibold tabular-nums">{hr.pendingLeave}</span>
+                  </li>
+                  <li className="flex justify-between gap-4">
+                    <span>Overtime</span>
+                    <span className="text-ink font-semibold tabular-nums">
+                      {hr.pendingOvertime}
+                    </span>
+                  </li>
+                  <li className="flex justify-between gap-4">
+                    <span>Profile updates</span>
+                    <span className="text-ink font-semibold tabular-nums">{hr.pendingProfile}</span>
+                  </li>
+                </ul>
+              </div>
+              {pendingTotal > 0 ? (
+                <span className="bg-warning/15 text-warning shrink-0 rounded-[var(--app-radius-pill)] px-2.5 py-1 text-xs font-semibold">
+                  {pendingTotal} pending
+                </span>
+              ) : (
+                <span className="bg-success-soft text-success shrink-0 rounded-[var(--app-radius-pill)] px-2.5 py-1 text-xs font-semibold">
+                  All clear
+                </span>
+              )}
+            </div>
+          </Card>
+        </div>
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         {QUEUES.map((item) => {

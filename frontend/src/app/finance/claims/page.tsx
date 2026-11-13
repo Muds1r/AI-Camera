@@ -58,6 +58,10 @@ function FinanceClaimsContent() {
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [ownAmount, setOwnAmount] = useState('');
+  const [ownReason, setOwnReason] = useState('');
+  const [ownFile, setOwnFile] = useState<File | null>(null);
+  const [ownClaims, setOwnClaims] = useState<Claim[]>([]);
   const [claims, setClaims] = useState<Claim[]>([]);
   const [status, setStatus] = useState('pending');
   const [statusTab, setStatusTab] = useState<Tab>(tab);
@@ -86,6 +90,12 @@ function FinanceClaimsContent() {
     );
   }
 
+  function loadOwn(next = tab) {
+    return apiJson<{ requests: Claim[] }>(`/api/benefits?kind=${next}`).then((data) =>
+      setOwnClaims(data.requests),
+    );
+  }
+
   useEffect(() => {
     loadPeople('').catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load employees'),
@@ -96,6 +106,7 @@ function FinanceClaimsContent() {
     loadClaims(tab, 'pending').catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load claims'),
     );
+    loadOwn(tab).catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -138,9 +149,50 @@ function FinanceClaimsContent() {
       setAmount('');
       setReason('');
       setFile(null);
-      setMessage('Claim sent to HR for approval.');
+      setMessage('Claim saved and approved.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not file the claim');
+    }
+  }
+
+  async function submitOwn(event: FormEvent) {
+    event.preventDefault();
+    setError('');
+    setMessage('');
+    if (ownFile) {
+      const fileProblem = documentFileError(ownFile);
+      if (fileProblem) {
+        setError(fileProblem);
+        return;
+      }
+    }
+    try {
+      let documentUrl: string | undefined;
+      if (ownFile) {
+        const form = new FormData();
+        form.append('document', ownFile);
+        const uploaded = await apiJson<{ document_url: string }>('/api/benefits/document', {
+          method: 'POST',
+          body: form,
+        });
+        documentUrl = uploaded.document_url;
+      }
+      await apiJson('/api/benefits', {
+        method: 'POST',
+        body: JSON.stringify({
+          kind: tab,
+          amount: Number(ownAmount),
+          reason: ownReason,
+          document_url: documentUrl,
+        }),
+      });
+      setOwnAmount('');
+      setOwnReason('');
+      setOwnFile(null);
+      setMessage('Your claim was sent to HR.');
+      await loadOwn();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not file your claim');
     }
   }
 
@@ -165,7 +217,7 @@ function FinanceClaimsContent() {
   return (
     <PageFrame
       title="Claims"
-      description="Medical and OPD requests employees and HR filed. A claim you save for a worker is approved immediately. Your own claim still goes to HR."
+      description="Approve medical and OPD claims from employees and HR. A claim you file for someone else is approved as soon as you save it. Your own claim still goes to HR."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
@@ -189,6 +241,9 @@ function FinanceClaimsContent() {
         <h2 className="text-ink text-sm font-semibold md:col-span-2">
           File a {tab === 'opd' ? 'OPD' : 'medical'} claim for someone else
         </h2>
+        <p className="text-mute text-sm md:col-span-2">
+          This is approved when you save it. It is added to that person&apos;s payslip.
+        </p>
         <label className="block md:col-span-2">
           <span className={labelClass}>Employee</span>
           <input
@@ -241,13 +296,48 @@ function FinanceClaimsContent() {
           onChange={(event) => setFile(event.target.files?.[0] ?? null)}
         />
         <button className={buttonClass} type="submit">
-          Send to HR
+          Save claim
+        </button>
+      </form>
+
+      <form className={formPanelClass} onSubmit={submitOwn}>
+        <h2 className="text-ink text-sm font-semibold md:col-span-2">
+          Your own {tab === 'opd' ? 'OPD' : 'medical'} claim
+        </h2>
+        <p className="text-mute text-sm md:col-span-2">
+          HR approves this. It does not appear in your review list.
+        </p>
+        <input
+          className={fieldClass}
+          required
+          inputMode="decimal"
+          placeholder="Amount"
+          value={ownAmount}
+          onChange={(event) => setOwnAmount(event.target.value)}
+        />
+        <textarea
+          className={`${fieldClass} min-h-20 md:col-span-2`}
+          required
+          minLength={3}
+          maxLength={2000}
+          placeholder="Reason"
+          value={ownReason}
+          onChange={(event) => setOwnReason(event.target.value)}
+        />
+        <input
+          className={`${fieldClass} md:col-span-2`}
+          type="file"
+          accept="image/jpeg,image/png,image/webp,application/pdf"
+          onChange={(event) => setOwnFile(event.target.files?.[0] ?? null)}
+        />
+        <button className={buttonClass} type="submit">
+          Send your claim to HR
         </button>
       </form>
 
       {ownClaims.length > 0 ? (
         <ul className="divide-line divide-y">
-          {ownPage.slice.map((claim) => (
+          {ownClaims.map((claim) => (
             <li key={claim.id} className="flex items-center justify-between gap-3 py-2 text-sm">
               <span>
                 Your claim · {claim.amount}
@@ -257,15 +347,6 @@ function FinanceClaimsContent() {
             </li>
           ))}
         </ul>
-      ) : null}
-      {ownPage.showPager ? (
-        <Pagination
-          page={ownPage.page}
-          totalPages={ownPage.totalPages}
-          total={ownPage.total}
-          pageSize={ownPage.pageSize}
-          onPageChange={ownPage.setPage}
-        />
       ) : null}
 
       <div className="flex flex-wrap gap-2">
