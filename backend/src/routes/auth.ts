@@ -10,6 +10,7 @@ import {
   isForgotPasswordRateLimited,
 } from '../lib/auth/forgot-password-rate-limit';
 import {
+  completePasswordReset,
   forgotPassword,
   hrContactEmail,
   listSessions,
@@ -19,6 +20,7 @@ import {
   refreshSession,
   revokeOtherSessions,
   revokeSession,
+  verifyPasswordResetCode,
 } from '../services/auth.service';
 
 const router = Router();
@@ -39,6 +41,22 @@ router.post(
       return;
     }
     const result = await forgotPassword(req.body?.email);
+    res.json(result);
+  }),
+);
+
+router.post(
+  '/forgot-password/verify',
+  asyncHandler(async (req, res) => {
+    const result = await verifyPasswordResetCode(req.body?.email, req.body?.code);
+    res.json(result);
+  }),
+);
+
+router.post(
+  '/forgot-password/complete',
+  asyncHandler(async (req, res) => {
+    const result = await completePasswordReset(req.body?.resetToken, req.body?.password);
     res.json(result);
   }),
 );

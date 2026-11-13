@@ -69,13 +69,11 @@ export function PayslipView({ slip }: { slip: Payslip }) {
             hint: 'Excludes weekends and holidays',
           },
           { label: 'Daily rate', value: pkr(slip.perDay) },
-          { label: 'Present', value: slip.attendance.present },
-          { label: 'Late', value: slip.attendance.late, hint: 'Paid in full' },
           { label: 'Paid leave', value: slip.attendance.paidLeave },
           {
-            label: 'Loss of pay',
-            value: slip.lopDays,
-            hint: `${slip.attendance.unpaidLeave} unpaid · ${slip.attendance.absent} absent`,
+            label: 'Unpaid leave',
+            value: slip.attendance.unpaidLeave,
+            hint: 'Each day removes one daily rate',
           },
         ]}
       />
@@ -110,10 +108,9 @@ export function PayslipView({ slip }: { slip: Payslip }) {
         </div>
       </div>
       <p className="text-mute max-w-2xl text-sm leading-relaxed">
-        The daily rate is the monthly package divided by this month&apos;s working days. Absence and
-        approved unpaid leave each remove one daily rate. Days still ahead this month stay in the
-        pay until they are missed. Approved medical and OPD claims are added, and overtime is paid
-        at {slip.overtimeMultiplier} times the hourly rate.
+        The daily rate is the monthly package divided by this month&apos;s working days. Approved
+        unpaid leave removes one daily rate per day. Approved medical and OPD claims are added, and
+        overtime is paid at {slip.overtimeMultiplier} times the hourly rate.
       </p>
     </div>
   );

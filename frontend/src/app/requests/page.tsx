@@ -12,10 +12,11 @@ import {
   tabBarClass,
   tabIdleClass,
 } from '@/components/page-frame';
-import { EmptyState, ListRow, MetricStrip, Notice } from '@/components/widgets';
+import { EmptyState, ListRow, MetricStrip, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import { DateField } from '@/components/date-field';
 import { documentFileError } from '@/lib/fields';
+import { usePaged } from '@/lib/use-paged';
 
 type Tab = 'benefits' | 'leave' | 'overtime';
 
@@ -194,7 +195,7 @@ function RequestsPageContent() {
   return (
     <PageFrame
       title="Requests"
-      description="Medical and OPD are reviewed by Finance. Leave, overtime, and attendance corrections are reviewed by HR."
+      description="Medical and OPD are reviewed by Finance. Leave and overtime are reviewed by HR."
     >
       <Notice error={error} message={message} />
       <div className={tabBarClass}>
@@ -407,18 +408,30 @@ function History({
 }: {
   rows: { id: string; title: string; detail: string; status: string; href?: string | null }[];
 }) {
+  const page = usePaged(rows, 5);
   if (rows.length === 0) return <EmptyState>No requests yet.</EmptyState>;
   return (
-    <div className="space-y-2">
-      {rows.map((row) => (
-        <ListRow
-          key={row.id}
-          title={row.title}
-          detail={row.detail}
-          status={row.status}
-          href={row.href}
+    <div>
+      <div className="space-y-2">
+        {page.slice.map((row) => (
+          <ListRow
+            key={row.id}
+            title={row.title}
+            detail={row.detail}
+            status={row.status}
+            href={row.href}
+          />
+        ))}
+      </div>
+      {page.showPager ? (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          pageSize={page.pageSize}
+          onPageChange={page.setPage}
         />
-      ))}
+      ) : null}
     </div>
   );
 }

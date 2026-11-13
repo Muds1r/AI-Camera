@@ -55,8 +55,7 @@ export function summarizePayDays(input: {
       unpaidLeave += 1;
       continue;
     }
-    if (date.key > input.today) continue;
-    absent += 1;
+    if (mark === 'absent' && date.key <= input.today) absent += 1;
   }
 
   return { employedWorkingDays, present, late, paidLeave, unpaidLeave, absent };

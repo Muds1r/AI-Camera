@@ -113,9 +113,9 @@ Copy the SQL schema from `backend/src/db/schema.sql` and run it in your **Supaba
 
 ### 5. Password reset email (optional)
 
-Forgot password sends a **new random password** to the **secondary (recovery) email** on the account (`secondary_email`), not the login address. Each user must have a distinct secondary email when the account is created.
+Forgot password emails a **6-digit code** to the **secondary (recovery) email** on the account (`secondary_email`), not the login address. The person enters that code, then chooses a new password. Each user must have a distinct secondary email when the account is created.
 
-For **local development**, you can leave `SMTP_*` unset. The backend logs the new password to the console instead of sending mail.
+For **local development**, you can leave `SMTP_*` unset. The backend logs the reset code to the console instead of sending mail.
 
 For **real email** (e.g. Gmail with an [app password](https://support.google.com/accounts/answer/185833)), set in `backend/.env`:
 

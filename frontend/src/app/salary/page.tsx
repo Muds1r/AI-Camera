@@ -35,7 +35,7 @@ export default function SalaryPage() {
   return (
     <PageFrame
       title="Payslip"
-      description="Pay for the selected month, after attendance, unpaid leave, overtime, and approved claims."
+      description="Pay for the selected month, after unpaid leave, overtime, and approved claims."
       actions={
         <label className="text-mute flex items-center gap-2 text-xs font-medium">
           Month

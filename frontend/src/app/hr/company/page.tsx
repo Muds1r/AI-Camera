@@ -111,7 +111,7 @@ export default function CompanyPage() {
           <fieldset>
             <legend className={sectionTitleClass}>Non-working days</legend>
             <p className="text-mute mb-3 text-sm font-medium">
-              Used for attendance and leave day counts.
+              Used for leave and payslip working days.
             </p>
             <div className="flex flex-wrap gap-2">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => {

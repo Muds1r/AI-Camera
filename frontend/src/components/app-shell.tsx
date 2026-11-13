@@ -16,14 +16,12 @@ import { ThemeToggle } from '@/components/theme-toggle';
 const BASE_NAV: Record<Role, { href: string; label: string }[]> = {
   employee: [
     { href: '/', label: 'Dashboard' },
-    { href: '/attendance', label: 'Attendance' },
     { href: '/requests', label: 'Requests' },
     { href: '/salary', label: 'Pay & Benefits' },
   ],
   hr: [
     { href: '/', label: 'Dashboard' },
     { href: '/hr/employees', label: 'Employees' },
-    { href: '/hr/attendance', label: 'Attendance' },
     { href: '/hr/requests', label: 'Approvals' },
     { href: '/hr/announcements', label: 'Announcements' },
     { href: '/hr/company', label: 'Company' },
@@ -38,7 +36,6 @@ const BASE_NAV: Record<Role, { href: string; label: string }[]> = {
   ],
   dataview: [
     { href: '/', label: 'Dashboard' },
-    { href: '/attendance', label: 'Attendance' },
     { href: '/cameras', label: 'Cameras' },
     { href: '/operations', label: 'Operations' },
   ],

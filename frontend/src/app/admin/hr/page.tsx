@@ -9,8 +9,9 @@ import {
   cardClass,
 } from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
-import { Notice, Switch } from '@/components/widgets';
+import { Notice, Pagination, Switch } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { usePaged } from '@/lib/use-paged';
 import type { SessionUser } from '@/lib/auth/types';
 import {
   digitsOnly,
@@ -32,6 +33,7 @@ export default function HrAccountsPage() {
   const [accountSecondaryEmail, setAccountSecondaryEmail] = useState('');
   const [password, setPassword] = useState('');
   const [selected, setSelected] = useState<SessionUser | null>(null);
+  const page = usePaged(users, 8);
   const [phone, setPhone] = useState('');
   const [secondaryEmail, setSecondaryEmail] = useState('');
   const [department, setDepartment] = useState('');
@@ -185,7 +187,7 @@ export default function HrAccountsPage() {
         </button>
       </form>
       <ul className="space-y-2">
-        {users.map((person) => (
+        {page.slice.map((person) => (
           <li
             key={person.id}
             className={`${cardClass} flex items-center justify-between px-4 py-3 text-sm`}
@@ -217,6 +219,15 @@ export default function HrAccountsPage() {
           </li>
         ))}
       </ul>
+      {page.showPager ? (
+        <Pagination
+          page={page.page}
+          totalPages={page.totalPages}
+          total={page.total}
+          pageSize={page.pageSize}
+          onPageChange={page.setPage}
+        />
+      ) : null}
       {selected ? (
         <form onSubmit={saveHr} className={`${formPanelClass} mt-6 md:grid-cols-2`}>
           <h2 className="text-ink text-sm font-medium md:col-span-2">Update {selected.email}</h2>

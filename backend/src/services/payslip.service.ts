@@ -4,7 +4,6 @@ import { HttpError } from '../lib/http';
 import { Permission, roleHasPermission } from '../lib/auth/permissions';
 import { AuthUser } from '../lib/auth/session';
 import {
-  type AttendanceMark,
   OVERTIME_MULTIPLIER,
   calculatePayslip,
   shiftHours,
@@ -32,14 +31,6 @@ function parseMonth(value: unknown): { year: number; month: number } {
   const month = text ? Number(text.slice(5, 7)) : now.getUTCMonth() + 1;
   if (month < 1 || month > 12) throw new HttpError(400, 'Month must be YYYY-MM');
   return { year, month };
-}
-
-function markOf(record: { status: string; clock_in: Date | null }): AttendanceMark | undefined {
-  if (record.status === 'half_day') return 'half_day';
-  if (record.status === 'late') return 'late';
-  if (record.status === 'absent') return 'absent';
-  if (record.clock_in || record.status === 'present') return 'present';
-  return undefined;
 }
 
 export async function payslipFor(actor: AuthUser, userId: string, monthValue: unknown) {
@@ -88,10 +79,7 @@ export async function payslipFor(actor: AuthUser, userId: string, monthValue: un
   });
   const workingKeys = new Set(dates.filter((date) => date.working).map((date) => date.key));
 
-  const [attendance, leaves, overtime, claims] = await Promise.all([
-    prisma.attendance.findMany({
-      where: { user_id: userId, work_date: { gte: start, lte: end } },
-    }),
+  const [leaves, overtime, claims] = await Promise.all([
     prisma.leaveRequest.findMany({
       where: {
         user_id: userId,
@@ -117,10 +105,6 @@ export async function payslipFor(actor: AuthUser, userId: string, monthValue: un
     }),
   ]);
 
-  const attendanceMarks: Record<string, AttendanceMark | undefined> = {};
-  for (const record of attendance) {
-    attendanceMarks[keyOf(record.work_date)] = markOf(record);
-  }
   const paidLeave: string[] = [];
   const unpaidLeave: string[] = [];
   const claimed = new Set<string>();
@@ -142,7 +126,7 @@ export async function payslipFor(actor: AuthUser, userId: string, monthValue: un
     dates,
     today,
     joinedOn: user.joined_on ? keyOf(user.joined_on) : null,
-    attendance: attendanceMarks,
+    attendance: {},
     paidLeave,
     unpaidLeave,
   });

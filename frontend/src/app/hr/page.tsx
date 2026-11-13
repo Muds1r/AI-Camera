@@ -6,11 +6,10 @@ import { Card } from '@/components/widgets';
 
 const LINKS = [
   { href: '/hr/employees', label: 'Employees', detail: 'Accounts, roles, and compensation' },
-  { href: '/hr/attendance', label: 'Attendance', detail: 'Team records, holidays, and your clock' },
   {
     href: '/hr/requests',
     label: 'Approvals',
-    detail: 'Leave, overtime, attendance, and claims finance filed',
+    detail: 'Leave, overtime, profile updates, and finance medical claims',
   },
   {
     href: '/hr/announcements',

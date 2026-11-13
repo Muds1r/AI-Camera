@@ -30,6 +30,7 @@ import {
 } from '@/components/page-frame';
 import {
   Notice,
+  Pagination,
   tableClass,
   tableHeadClass,
   tableRowClass,
@@ -37,9 +38,11 @@ import {
 } from '@/components/widgets';
 import { PasswordField } from '@/components/password-field';
 import { PictureField } from '@/components/picture-field';
+import { usePaged } from '@/lib/use-paged';
 
 export default function AccountsPage() {
   const [users, setUsers] = useState<SessionUser[]>([]);
+  const accounts = usePaged(users, 8);
   const [me, setMe] = useState<SessionUser | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
@@ -289,7 +292,7 @@ export default function AccountsPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user) => (
+                {accounts.slice.map((user) => (
                   <tr key={user.id} className={tableRowClass}>
                     <td className="px-4 py-3">{user.full_name}</td>
                     <td className="text-mute px-4 py-3">{user.email}</td>
@@ -312,6 +315,15 @@ export default function AccountsPage() {
               </tbody>
             </table>
           </div>
+          {accounts.showPager ? (
+            <Pagination
+              page={accounts.page}
+              totalPages={accounts.totalPages}
+              total={accounts.total}
+              pageSize={accounts.pageSize}
+              onPageChange={accounts.setPage}
+            />
+          ) : null}
         </DataPanel>
       </PageSection>
     </PageFrame>

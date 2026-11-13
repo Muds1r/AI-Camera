@@ -138,7 +138,6 @@ export default function EmployeesPage() {
           salary_allowance: parseAmount(allowance),
           medical_limit: parseAmount(medical),
           opd_limit: parseAmount(opd),
-          clock_enabled: newRole !== 'dataview',
         }),
       });
       setMessage('Account created.');

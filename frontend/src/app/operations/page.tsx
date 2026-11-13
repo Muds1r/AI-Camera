@@ -8,8 +8,9 @@ import {
   tabBarClass,
   tabIdleClass,
 } from '@/components/page-frame';
-import { EmptyState, ListRow, Notice } from '@/components/widgets';
+import { EmptyState, ListRow, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
+import { usePaged } from '@/lib/use-paged';
 
 type Tab = 'detections' | 'alerts';
 
@@ -36,6 +37,8 @@ export default function OperationsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [severity, setSeverity] = useState('');
   const [error, setError] = useState('');
+  const detectionPage = usePaged(detections, 8);
+  const alertPage = usePaged(alerts, 8);
 
   function load(nextSeverity = severity) {
     const alertQuery = nextSeverity ? `?severity=${encodeURIComponent(nextSeverity)}` : '';
@@ -87,26 +90,48 @@ export default function OperationsPage() {
       </div>
 
       {tab === 'detections' ? (
-        <Feed empty={!error && detections.length === 0} emptyLabel="No detections recorded.">
-          {detections.map((item) => (
-            <ListRow
-              key={item.id}
-              title={item.label}
-              detail={`${item.cameras?.name || 'Camera'} · ${Math.round(Number(item.confidence) * 100)}% · ${new Date(item.created_at).toLocaleString()}`}
+        <>
+          <Feed empty={!error && detections.length === 0} emptyLabel="No detections recorded.">
+            {detectionPage.slice.map((item) => (
+              <ListRow
+                key={item.id}
+                title={item.label}
+                detail={`${item.cameras?.name || 'Camera'} · ${Math.round(Number(item.confidence) * 100)}% · ${new Date(item.created_at).toLocaleString()}`}
+              />
+            ))}
+          </Feed>
+          {detectionPage.showPager ? (
+            <Pagination
+              page={detectionPage.page}
+              totalPages={detectionPage.totalPages}
+              total={detectionPage.total}
+              pageSize={detectionPage.pageSize}
+              onPageChange={detectionPage.setPage}
             />
-          ))}
-        </Feed>
+          ) : null}
+        </>
       ) : (
-        <Feed empty={!error && alerts.length === 0} emptyLabel="No alerts recorded.">
-          {alerts.map((item) => (
-            <ListRow
-              key={item.id}
-              title={item.message}
-              detail={`${item.cameras?.name || 'Camera'} · ${new Date(item.created_at).toLocaleString()}`}
-              status={item.severity}
+        <>
+          <Feed empty={!error && alerts.length === 0} emptyLabel="No alerts recorded.">
+            {alertPage.slice.map((item) => (
+              <ListRow
+                key={item.id}
+                title={item.message}
+                detail={`${item.cameras?.name || 'Camera'} · ${new Date(item.created_at).toLocaleString()}`}
+                status={item.severity}
+              />
+            ))}
+          </Feed>
+          {alertPage.showPager ? (
+            <Pagination
+              page={alertPage.page}
+              totalPages={alertPage.totalPages}
+              total={alertPage.total}
+              pageSize={alertPage.pageSize}
+              onPageChange={alertPage.setPage}
             />
-          ))}
-        </Feed>
+          ) : null}
+        </>
       )}
     </PageFrame>
   );

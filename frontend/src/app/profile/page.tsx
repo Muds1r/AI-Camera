@@ -1,9 +1,11 @@
 'use client';
 
 import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   PageFrame,
   buttonClass,
+  buttonDangerClass,
   buttonSecondaryClass,
   cardClass,
   fieldClass,
@@ -11,7 +13,9 @@ import {
 } from '@/components/page-frame';
 import { PasswordField } from '@/components/password-field';
 import { PictureField } from '@/components/picture-field';
-import { Card, ListRow, Notice } from '@/components/widgets';
+import { ActivityList } from '@/components/activity-list';
+import { Disclosure } from '@/components/disclosure';
+import { ConfirmDialog, ListRow, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import { ROLE_LABELS, type Role } from '@/lib/auth/permissions';
 import type { SessionUser } from '@/lib/auth/types';
@@ -76,6 +80,7 @@ function Field({
 }
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [user, setUser] = useState<SessionUser | null>(null);
   const [requests, setRequests] = useState<ProfileRequest[]>([]);
   const [activity, setActivity] = useState<
@@ -102,6 +107,8 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [confirmOthers, setConfirmOthers] = useState(false);
+  const [confirmAll, setConfirmAll] = useState(false);
   const dobRef = useRef<HTMLInputElement>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [passwordErrors, setPasswordErrors] = useState<Record<string, string>>({});
@@ -256,133 +263,215 @@ export default function ProfilePage() {
     }
   }
 
+  async function signOutAll() {
+    setError('');
+    setMessage('');
+    try {
+      await apiJson('/api/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ all: true }),
+      });
+      router.push('/login');
+      router.refresh();
+    } catch (err) {
+      setConfirmAll(false);
+      setError(err instanceof Error ? err.message : 'Could not sign out of all devices');
+    }
+  }
+  async function signOutOthers() {
+    setError('');
+    setMessage('');
+    try {
+      await apiJson('/api/auth/sessions/others', { method: 'POST' });
+      setConfirmOthers(false);
+      setMessage('Signed out of the other devices. This browser stays signed in.');
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not sign out the other devices');
+    }
+  }
+
   const roleLabel = user ? ROLE_LABELS[user.role as Role] : '';
+  const otherDevices = sessions.filter((item) => !item.current).length;
+  const [devicePage, setDevicePage] = useState(1);
+  const devicePageSize = 4;
+  const devicePages = Math.max(1, Math.ceil(sessions.length / devicePageSize));
+  const deviceCurrent = Math.min(devicePage, devicePages);
+  const visibleDevices = sessions.slice(
+    (deviceCurrent - 1) * devicePageSize,
+    deviceCurrent * devicePageSize,
+  );
 
   return (
-    <PageFrame title="Profile">
+    <PageFrame
+      title="Profile"
+      description="Your personal details, password, and the devices where you are signed in."
+    >
       <Notice error={error} message={message} />
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="Signed-in devices">
-          <ul className="space-y-2">
-            {sessions.map((item) => (
-              <li key={item.id} className="flex items-center justify-between gap-3 text-sm">
-                <span>
-                  {new Date(item.created_at).toLocaleString()}
-                  {item.current ? ' · this device' : ''}
-                  {item.remember_me ? ' · remembered' : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <button
-            type="button"
-            className={`${buttonSecondaryClass} mt-3`}
-            onClick={() =>
-              apiJson('/api/auth/sessions/others', { method: 'POST' }).then(() => load())
-            }
-          >
-            Sign out other devices
-          </button>
-        </Card>
-        <Card title="Recent activity">
-          {activity.length === 0 ? (
-            <p className="text-mute text-sm">No activity yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {activity.slice(0, 8).map((item) => (
-                <li key={item.id} className="text-sm">
-                  <span className="text-ink font-medium capitalize">{item.label}</span>
-                  <span className="text-mute block text-xs">
-                    {new Date(item.at).toLocaleString()}
-                    {item.detail ? ` · ${item.detail}` : ''}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-      <div className="grid items-start gap-6 xl:grid-cols-[17.5rem_minmax(0,1fr)]">
-        <aside className={`${cardClass} overflow-hidden`}>
-          <div className="p-6">
-            <div className="flex flex-col items-center text-center">
-              {preview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={preview}
-                  alt=""
-                  className="border-line h-28 w-28 rounded-full border object-cover"
+      <div className="grid items-start gap-6 xl:grid-cols-[22rem_minmax(0,1fr)]">
+        <div className="flex flex-col gap-6">
+          <aside className={`${cardClass} overflow-hidden`}>
+            <div className="p-6">
+              <div className="flex flex-col items-center text-center">
+                {preview ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={preview}
+                    alt=""
+                    className="border-line h-28 w-28 rounded-full border object-cover"
+                  />
+                ) : (
+                  <div className="bg-primary text-primary-on flex h-28 w-28 items-center justify-center rounded-full text-2xl font-semibold">
+                    {(fullName || user?.email || '?').slice(0, 1).toUpperCase()}
+                  </div>
+                )}
+                <p className="text-ink mt-4 text-base font-semibold">
+                  {fullName || 'Your profile'}
+                </p>
+                <p className="text-mute mt-1 text-sm break-all">{user?.email}</p>
+                {roleLabel ? (
+                  <p className="text-mute mt-1 text-xs font-medium">{roleLabel}</p>
+                ) : null}
+                {user?.joined_on ? (
+                  <p className="text-mute mt-3 text-xs">Joined {dateInputValue(user.joined_on)}</p>
+                ) : null}
+              </div>
+              <div className="border-line mt-6 border-t pt-5">
+                <PictureField
+                  preview={null}
+                  previewClassName="hidden"
+                  onFile={(file) => {
+                    setPicture(file);
+                    setPreview((current) => {
+                      if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
+                      return file ? URL.createObjectURL(file) : (user?.avatar_url ?? null);
+                    });
+                  }}
                 />
-              ) : (
-                <div className="bg-primary text-primary-on flex h-28 w-28 items-center justify-center rounded-full text-2xl font-semibold">
-                  {(fullName || user?.email || '?').slice(0, 1).toUpperCase()}
-                </div>
-              )}
-              <p className="text-ink mt-4 text-base font-semibold">{fullName || 'Your profile'}</p>
-              <p className="text-mute mt-1 text-sm break-all">{user?.email}</p>
-              {roleLabel ? <p className="text-mute mt-1 text-xs font-medium">{roleLabel}</p> : null}
-              {user?.joined_on ? (
-                <p className="text-mute mt-3 text-xs">Joined {dateInputValue(user.joined_on)}</p>
+              </div>
+            </div>
+            <div className="border-line border-t">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 px-6 py-4 text-left"
+                aria-expanded={passwordOpen}
+                onClick={() => setPasswordOpen((open) => !open)}
+              >
+                <span className="text-ink text-sm font-semibold">Change password</span>
+                <span className="text-mute text-xs font-medium">
+                  {passwordOpen ? 'Hide' : 'Show'}
+                </span>
+              </button>
+              {passwordOpen ? (
+                <form onSubmit={submitPassword} className="px-6 pb-6" noValidate>
+                  <p className="text-mute text-xs">
+                    8 to 72 characters, with a letter and a number.
+                  </p>
+                  <div className="mt-4 grid gap-4">
+                    <Field label="Current password" error={passwordErrors.current_password}>
+                      <div className="mt-1">
+                        <PasswordField
+                          value={currentPassword}
+                          onChange={setCurrentPassword}
+                          placeholder="Current password"
+                          autoComplete="current-password"
+                        />
+                      </div>
+                    </Field>
+                    <Field label="New password" error={passwordErrors.new_password}>
+                      <div className="mt-1">
+                        <PasswordField
+                          value={newPassword}
+                          onChange={setNewPassword}
+                          placeholder="New password"
+                          autoComplete="new-password"
+                        />
+                      </div>
+                    </Field>
+                  </div>
+                  <button className={`${buttonSecondaryClass} mt-4 w-full`} type="submit">
+                    Update password
+                  </button>
+                </form>
               ) : null}
             </div>
-            <div className="border-line mt-6 border-t pt-5">
-              <PictureField
-                preview={null}
-                previewClassName="hidden"
-                onFile={(file) => {
-                  setPicture(file);
-                  setPreview((current) => {
-                    if (current?.startsWith('blob:')) URL.revokeObjectURL(current);
-                    return file ? URL.createObjectURL(file) : (user?.avatar_url ?? null);
-                  });
-                }}
-              />
+          </aside>
+          <section className={`${cardClass} overflow-hidden`}>
+            <div className="px-5 py-4">
+              <h2 className="text-ink text-sm font-semibold">Signed-in devices</h2>
+              <p className="text-mute mt-1 text-xs leading-relaxed">
+                Browsers signed in to your account. Signing out the others leaves this one signed
+                in.
+              </p>
             </div>
-          </div>
-          <div className="border-line border-t">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between gap-3 px-6 py-4 text-left"
-              aria-expanded={passwordOpen}
-              onClick={() => setPasswordOpen((open) => !open)}
-            >
-              <span className="text-ink text-sm font-semibold">Change password</span>
-              <span className="text-mute text-xs font-medium">
-                {passwordOpen ? 'Hide' : 'Show'}
-              </span>
-            </button>
-            {passwordOpen ? (
-              <form onSubmit={submitPassword} className="px-6 pb-6" noValidate>
-                <p className="text-mute text-xs">8 to 72 characters, with a letter and a number.</p>
-                <div className="mt-4 grid gap-4">
-                  <Field label="Current password" error={passwordErrors.current_password}>
-                    <div className="mt-1">
-                      <PasswordField
-                        value={currentPassword}
-                        onChange={setCurrentPassword}
-                        placeholder="Current password"
-                        autoComplete="current-password"
-                      />
+            {sessions.length === 0 ? (
+              <p className="text-mute border-line border-t px-5 py-6 text-sm">
+                No devices are signed in.
+              </p>
+            ) : (
+              <ul className="divide-line border-line divide-y border-t">
+                {visibleDevices.map((item) => (
+                  <li key={item.id} className="flex items-center justify-between gap-3 px-5 py-3.5">
+                    <div className="min-w-0">
+                      <p className="text-ink text-sm font-medium">
+                        {item.current ? 'This device' : 'Another device'}
+                      </p>
+                      <p className="text-mute mt-0.5 text-xs">
+                        Signed in{' '}
+                        {new Date(item.created_at).toLocaleString(undefined, {
+                          dateStyle: 'medium',
+                          timeStyle: 'short',
+                        })}
+                        {item.remember_me ? ' · stays signed in' : ''}
+                      </p>
                     </div>
-                  </Field>
-                  <Field label="New password" error={passwordErrors.new_password}>
-                    <div className="mt-1">
-                      <PasswordField
-                        value={newPassword}
-                        onChange={setNewPassword}
-                        placeholder="New password"
-                        autoComplete="new-password"
-                      />
-                    </div>
-                  </Field>
-                </div>
-                <button className={`${buttonSecondaryClass} mt-4 w-full`} type="submit">
-                  Update password
-                </button>
-              </form>
+                    {item.current ? (
+                      <span className="bg-primary-soft text-primary shrink-0 rounded-[var(--app-radius-pill)] px-2.5 py-1 text-xs font-semibold">
+                        Current
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {sessions.length > devicePageSize ? (
+              <Pagination
+                page={deviceCurrent}
+                totalPages={devicePages}
+                total={sessions.length}
+                pageSize={devicePageSize}
+                onPageChange={setDevicePage}
+              />
             ) : null}
-          </div>
-        </aside>
+            <div className="border-line flex flex-col gap-2 border-t px-5 py-3">
+              {otherDevices > 0 ? (
+                <button
+                  type="button"
+                  className={`${buttonSecondaryClass} w-full`}
+                  onClick={() => setConfirmOthers(true)}
+                >
+                  Sign out other devices
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className={`${buttonDangerClass} w-full`}
+                onClick={() => setConfirmAll(true)}
+              >
+                Sign out all devices
+              </button>
+            </div>
+          </section>
+          <section className={`${cardClass} overflow-hidden`}>
+            <div className="border-line border-b px-5 py-4">
+              <h2 className="text-ink text-sm font-semibold">Activity</h2>
+              <p className="text-mute mt-1 text-xs leading-relaxed">
+                Sign-ins, sign-outs, password changes, and other updates on your account.
+              </p>
+            </div>
+            <ActivityList items={activity} framed={false} pageSize={4} />
+          </section>
+        </div>
 
         <div className="flex min-w-0 flex-col gap-6">
           <form onSubmit={submit} className={`${cardClass} p-6`} noValidate>
@@ -557,23 +646,47 @@ export default function ProfilePage() {
               </button>
             </div>
           </form>
-
-          {requests.length > 0 ? (
-            <Card title="Update requests">
-              <div className="space-y-2">
-                {requests.map((item) => (
-                  <ListRow
-                    key={item.id}
-                    title={new Date(item.created_at).toLocaleDateString()}
-                    detail={item.review_note ?? undefined}
-                    status={item.status}
-                  />
-                ))}
-              </div>
-            </Card>
-          ) : null}
         </div>
       </div>
+
+      {requests.length > 0 ? (
+        <Disclosure
+          title="Changes sent to HR"
+          description="HR reviews these before they appear on your profile."
+        >
+          <div className="space-y-2 p-4">
+            {requests.map((item) => (
+              <ListRow
+                key={item.id}
+                title={new Date(item.created_at).toLocaleDateString(undefined, {
+                  dateStyle: 'medium',
+                })}
+                detail={item.review_note ?? 'Waiting for a decision'}
+                status={item.status}
+              />
+            ))}
+          </div>
+        </Disclosure>
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmOthers}
+        title="Sign out of the other devices?"
+        detail="This browser stays signed in. You will need the password to open the account on the others."
+        confirmLabel="Sign out others"
+        tone="danger"
+        onConfirm={signOutOthers}
+        onClose={() => setConfirmOthers(false)}
+      />
+      <ConfirmDialog
+        open={confirmAll}
+        title="Sign out of all devices?"
+        detail="This browser is included. You will need your password to sign in again."
+        confirmLabel="Sign out all"
+        tone="danger"
+        onConfirm={signOutAll}
+        onClose={() => setConfirmAll(false)}
+      />
     </PageFrame>
   );
 }

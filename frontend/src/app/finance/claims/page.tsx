@@ -14,9 +14,10 @@ import {
   tabBarClass,
   tabIdleClass,
 } from '@/components/page-frame';
-import { Badge, ConfirmDialog, EmptyState, Notice } from '@/components/widgets';
+import { Badge, ConfirmDialog, EmptyState, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import { documentFileError } from '@/lib/fields';
+import { usePaged } from '@/lib/use-paged';
 
 type Tab = 'medical' | 'opd';
 
@@ -65,6 +66,8 @@ function FinanceClaimsContent() {
   const [status, setStatus] = useState('pending');
   const [statusTab, setStatusTab] = useState<Tab>(tab);
   const shownStatus = statusTab === tab ? status : 'pending';
+  const ownPage = usePaged(ownClaims, 4);
+  const reviewPage = usePaged(claims, 6, `${tab}|${shownStatus}`);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState<{ id: string; status: 'approved' | 'rejected' } | null>(
@@ -367,7 +370,7 @@ function FinanceClaimsContent() {
         <EmptyState>No claims in this list.</EmptyState>
       ) : (
         <ul className="divide-line divide-y">
-          {claims.map((claim) => (
+          {reviewPage.slice.map((claim) => (
             <li key={claim.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
               <div className="min-w-0">
                 <p className="text-ink text-sm font-medium">
@@ -408,6 +411,15 @@ function FinanceClaimsContent() {
           ))}
         </ul>
       )}
+      {reviewPage.showPager ? (
+        <Pagination
+          page={reviewPage.page}
+          totalPages={reviewPage.totalPages}
+          total={reviewPage.total}
+          pageSize={reviewPage.pageSize}
+          onPageChange={reviewPage.setPage}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(pending)}
