@@ -28,17 +28,25 @@ import {
   choiceError,
   dateOfBirthError,
   digitsOnly,
+  duplicateLoginEmailError,
+  EMAIL_INPUT_PATTERN,
   emailError,
   firstError,
   idCardError,
   joinedOnError,
-  labelError,
   nameError,
   passwordError,
   phoneError,
   secondaryEmailError,
   withoutDigits,
 } from '@/lib/fields';
+
+interface Department {
+  id: string;
+  name: string;
+  medical_limit: number;
+  opd_limit: number;
+}
 
 function parseAmount(value: string) {
   const trimmed = value.trim();
@@ -64,12 +72,10 @@ export default function EmployeesPage() {
   const [password, setPassword] = useState('');
   const [giveLogin, setGiveLogin] = useState(true);
   const [newRole, setNewRole] = useState<'employee' | 'dataview'>('employee');
-  const [department, setDepartment] = useState('');
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentId, setDepartmentId] = useState('');
   const [designation, setDesignation] = useState('');
   const [salary, setSalary] = useState('');
-  const [allowance, setAllowance] = useState('');
-  const [medical, setMedical] = useState('');
-  const [opd, setOpd] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
 
@@ -87,17 +93,23 @@ export default function EmployeesPage() {
     load(1, '', '', 'true').catch((err: unknown) =>
       setError(err instanceof Error ? err.message : 'Could not load'),
     );
+    apiJson<{ departments: Department[] }>('/api/company/departments')
+      .then((data) => setDepartments(data.departments))
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const selectedDepartment = departments.find((item) => item.id === departmentId);
 
   async function create(event: FormEvent) {
     event.preventDefault();
     setError('');
     setMessage('');
     const employee = newRole === 'employee';
+    const knownLoginEmails = users.map((person) => person.email);
     const problem = firstError({
       full_name: nameError(fullName),
-      email: emailError(email, true),
+      email: emailError(email, true) || duplicateLoginEmailError(email, knownLoginEmails),
       phone: phoneError(accountPhone, true),
       secondary_email: secondaryEmailError(accountSecondaryEmail, email, true),
       id_card_number: idCardError(accountIdCard, employee),
@@ -109,12 +121,15 @@ export default function EmployeesPage() {
         employee,
       ),
       joined_on: joinedOnError(accountJoined),
-      department: labelError(department, 'Department'),
       designation: labelError(designation, 'Designation'),
       password: giveLogin ? passwordError(password, true) : '',
     });
     if (problem) {
       setError(problem);
+      return;
+    }
+    if (!departmentId) {
+      setError('Choose a department');
       return;
     }
     try {
@@ -132,12 +147,9 @@ export default function EmployeesPage() {
           login_enabled: giveLogin,
           ...(giveLogin ? { password } : {}),
           role: newRole,
-          department,
+          department_id: departmentId,
           designation,
           salary_basic: parseAmount(salary),
-          salary_allowance: parseAmount(allowance),
-          medical_limit: parseAmount(medical),
-          opd_limit: parseAmount(opd),
         }),
       });
       setMessage('Account created.');
@@ -150,12 +162,9 @@ export default function EmployeesPage() {
       setAccountGender('');
       setAccountJoined('');
       setPassword('');
-      setDepartment('');
+      setDepartmentId('');
       setDesignation('');
       setSalary('');
-      setAllowance('');
-      setMedical('');
-      setOpd('');
       await load(1);
       setPage(1);
     } catch (err) {
@@ -186,7 +195,7 @@ export default function EmployeesPage() {
 
       <PageSection
         title="New account"
-        description="Employees also need a 13-digit ID card, date of birth, and gender. Phone numbers are 10 to 12 digits."
+        description="Login email must be unique. Secondary (recovery) email is required for password reset OTP. Both must look like name@company.com. Sign-in passwords need at least 8 characters with uppercase, lowercase, and a number. Employees also need a 13-digit ID card, date of birth, and gender; phone numbers are 10 to 12 digits."
       >
         <form onSubmit={create} className={`${formPanelClass} md:grid-cols-2`}>
           <input
@@ -204,6 +213,8 @@ export default function EmployeesPage() {
             placeholder="Login email"
             autoComplete="off"
             maxLength={254}
+            pattern={EMAIL_INPUT_PATTERN}
+            title="Use a valid address like name@company.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
@@ -222,9 +233,11 @@ export default function EmployeesPage() {
             required
             type="email"
             className={fieldClass}
-            placeholder="Secondary email"
+            placeholder="Recovery email (required)"
             autoComplete="off"
             maxLength={254}
+            pattern={EMAIL_INPUT_PATTERN}
+            title="Use a valid address like name@company.com"
             value={accountSecondaryEmail}
             onChange={(event) => setAccountSecondaryEmail(event.target.value)}
           />
@@ -263,12 +276,33 @@ export default function EmployeesPage() {
             value={accountJoined}
             onChange={(event) => setAccountJoined(event.target.value)}
           />
-          <input
+          <select
             className={fieldClass}
-            placeholder="Department"
-            value={department}
-            onChange={(event) => setDepartment(event.target.value)}
-          />
+            required
+            value={departmentId}
+            onChange={(event) => setDepartmentId(event.target.value)}
+          >
+            <option value="">Department</option>
+            {departments.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+          {selectedDepartment ? (
+            <p className="text-mute text-sm md:col-span-2">
+              Medical limit PKR {selectedDepartment.medical_limit.toLocaleString()} · OPD limit PKR{' '}
+              {selectedDepartment.opd_limit.toLocaleString()} (applied on create)
+            </p>
+          ) : (
+            <p className="text-mute text-sm md:col-span-2">
+              Add departments under{' '}
+              <Link href="/hr/company" className="text-accent underline">
+                Company settings
+              </Link>{' '}
+              if the list is empty.
+            </p>
+          )}
           <input
             className={fieldClass}
             placeholder="Designation"
@@ -282,30 +316,6 @@ export default function EmployeesPage() {
             placeholder="Basic salary"
             value={salary}
             onChange={(event) => setSalary(event.target.value)}
-          />
-          <input
-            className={fieldClass}
-            type="number"
-            min="0"
-            placeholder="Allowance"
-            value={allowance}
-            onChange={(event) => setAllowance(event.target.value)}
-          />
-          <input
-            className={fieldClass}
-            type="number"
-            min="0"
-            placeholder="Medical limit"
-            value={medical}
-            onChange={(event) => setMedical(event.target.value)}
-          />
-          <input
-            className={fieldClass}
-            type="number"
-            min="0"
-            placeholder="OPD limit"
-            value={opd}
-            onChange={(event) => setOpd(event.target.value)}
           />
           <select
             className={fieldClass}
@@ -328,7 +338,7 @@ export default function EmployeesPage() {
               required
               value={password}
               onChange={setPassword}
-              placeholder="Password, letter and number"
+              placeholder="Min 8 chars: upper, lower, number"
             />
           ) : (
             <p className="text-mute text-sm md:col-span-2">

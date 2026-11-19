@@ -270,11 +270,11 @@ describe('forgotPassword', () => {
     const verified = await verifyPasswordResetCode('login@example.com', sent[0].code);
     expect(verified.resetToken.length).toBeGreaterThan(10);
 
-    const saved = await completePasswordReset(verified.resetToken, 'new-password1');
+    const saved = await completePasswordReset(verified.resetToken, 'New-password1');
     expect(saved.message).toMatch(/sign in/i);
-    expect(await bcrypt.compare('new-password1', state().users[0].password_hash)).toBe(true);
+    expect(await bcrypt.compare('New-password1', state().users[0].password_hash)).toBe(true);
     expect(state().tokens.every((token) => token.revoked_at)).toBe(true);
-    await expect(completePasswordReset(verified.resetToken, 'another-password1')).rejects.toThrow(
+    await expect(completePasswordReset(verified.resetToken, 'Another-pass1')).rejects.toThrow(
       /expired/i,
     );
   });

@@ -18,6 +18,7 @@ export interface SessionUser {
   info: string | null;
   avatar_url: string | null;
   department: string | null;
+  department_id: string | null;
   designation: string | null;
   salary_basic: number;
   salary_allowance: number;

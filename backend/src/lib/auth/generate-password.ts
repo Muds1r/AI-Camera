@@ -4,7 +4,7 @@ const LOWER = 'abcdefghjkmnpqrstuvwxyz';
 const UPPER = 'ABCDEFGHJKMNPQRSTUVWXYZ';
 const DIGITS = '23456789';
 
-/** Random password that satisfies assertPassword (8–72 chars, letter + digit). */
+/** Random password that satisfies assertPassword (8–72 chars, upper + lower + digit). */
 export function generateCompliantPassword(length = 14): string {
   const size = Math.max(8, Math.min(72, length));
   const all = LOWER + UPPER + DIGITS;

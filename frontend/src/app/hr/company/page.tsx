@@ -19,6 +19,13 @@ interface LeaveType {
   default_days: number;
 }
 
+interface Department {
+  id: string;
+  name: string;
+  medical_limit: number;
+  opd_limit: number;
+}
+
 function formatDays(value: number) {
   return value === 0 ? '' : String(value);
 }
@@ -36,13 +43,24 @@ export default function CompanyPage() {
   const [logo, setLogo] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [deptName, setDeptName] = useState('');
+  const [deptMedical, setDeptMedical] = useState('');
+  const [deptOpd, setDeptOpd] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+
+  function loadDepartments() {
+    return apiJson<{ departments: Department[] }>('/api/company/departments').then((data) =>
+      setDepartments(data.departments),
+    );
+  }
 
   useEffect(() => {
     Promise.all([
       apiJson<{ company: { logo_url: string | null; weekend_days: string } }>('/api/company'),
       apiJson<{ types: LeaveType[] }>('/api/leave/types'),
+      loadDepartments(),
     ]).then(([companyRes, leaveRes]) => {
       setWeekend(companyRes.company.weekend_days.split(',').filter(Boolean));
       setLogo(companyRes.company.logo_url);
@@ -100,10 +118,64 @@ export default function CompanyPage() {
     setFile(null);
   }
 
+  async function addDepartment() {
+    if (!deptName.trim()) {
+      setError('Department name is required');
+      return;
+    }
+    setError('');
+    try {
+      await apiJson('/api/company/departments', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: deptName,
+          medical_limit: parseDays(deptMedical),
+          opd_limit: parseDays(deptOpd),
+        }),
+      });
+      setDeptName('');
+      setDeptMedical('');
+      setDeptOpd('');
+      setMessage('Department added.');
+      await loadDepartments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not add department');
+    }
+  }
+
+  async function saveDepartment(dept: Department) {
+    setError('');
+    try {
+      await apiJson(`/api/company/departments/${dept.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: dept.name,
+          medical_limit: dept.medical_limit,
+          opd_limit: dept.opd_limit,
+        }),
+      });
+      setMessage('Department updated.');
+      await loadDepartments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not update department');
+    }
+  }
+
+  async function removeDepartment(id: string) {
+    setError('');
+    try {
+      await apiJson(`/api/company/departments/${id}`, { method: 'DELETE' });
+      setMessage('Department removed.');
+      await loadDepartments();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not remove department');
+    }
+  }
+
   return (
     <PageFrame
       title="Company Settings"
-      description="Weekend days, default leave for new employees, and logo on sign-in and in the sidebar."
+      description="Departments with medical and OPD limits, weekends, default leave, and logo."
     >
       <Notice error={error} message={message} />
       <form onSubmit={save} className="grid max-w-2xl gap-6">
@@ -139,6 +211,117 @@ export default function CompanyPage() {
               })}
             </div>
           </fieldset>
+        </Card>
+
+        <Card title="Departments">
+          <p className="text-mute mb-4 text-sm font-medium">
+            New employees pick a department and receive its medical and OPD limits automatically.
+          </p>
+          <div className="mb-4 grid gap-3 sm:grid-cols-4">
+            <input
+              className={fieldClass}
+              placeholder="Department name"
+              value={deptName}
+              onChange={(event) => setDeptName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void addDepartment();
+                }
+              }}
+            />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0"
+              placeholder="Medical limit"
+              value={deptMedical}
+              onChange={(event) => setDeptMedical(event.target.value)}
+            />
+            <input
+              className={fieldClass}
+              type="number"
+              min="0"
+              placeholder="OPD limit"
+              value={deptOpd}
+              onChange={(event) => setDeptOpd(event.target.value)}
+            />
+            <button
+              type="button"
+              className={buttonSecondaryClass}
+              onClick={() => void addDepartment()}
+            >
+              Add department
+            </button>
+          </div>
+          {departments.length > 0 ? (
+            <ul className="divide-line divide-y">
+              {departments.map((dept) => (
+                <li
+                  key={dept.id}
+                  className="grid gap-3 py-3 sm:grid-cols-[1fr_8rem_8rem_auto_auto] sm:items-center"
+                >
+                  <input
+                    className={fieldClass}
+                    value={dept.name}
+                    onChange={(event) =>
+                      setDepartments((rows) =>
+                        rows.map((row) =>
+                          row.id === dept.id ? { ...row, name: event.target.value } : row,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    className={fieldClass}
+                    type="number"
+                    min="0"
+                    value={dept.medical_limit}
+                    onChange={(event) =>
+                      setDepartments((rows) =>
+                        rows.map((row) =>
+                          row.id === dept.id
+                            ? { ...row, medical_limit: Number(event.target.value) || 0 }
+                            : row,
+                        ),
+                      )
+                    }
+                  />
+                  <input
+                    className={fieldClass}
+                    type="number"
+                    min="0"
+                    value={dept.opd_limit}
+                    onChange={(event) =>
+                      setDepartments((rows) =>
+                        rows.map((row) =>
+                          row.id === dept.id
+                            ? { ...row, opd_limit: Number(event.target.value) || 0 }
+                            : row,
+                        ),
+                      )
+                    }
+                  />
+                  <button
+                    type="button"
+                    className={buttonSecondaryClass}
+                    onClick={() => saveDepartment(dept)}
+                  >
+                    Save
+                  </button>
+                  <button
+                    type="button"
+                    className={`${buttonSecondaryClass} text-danger border-danger/20`}
+                    onClick={() => removeDepartment(dept.id)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-mute text-sm">No departments yet. Add one above.</p>
+          )}
         </Card>
 
         <Card title="Default leave (new employees)">

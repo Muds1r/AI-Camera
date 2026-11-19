@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from './passwords';
 import { generateCompliantPassword } from './generate-password';
 import { canAssignRole, isRole } from './permissions';
 import { AuthUser } from './session';
+import { perksFromDepartmentId } from '../../services/departments.service';
 import {
   BLOOD_GROUPS,
   GENDERS,
@@ -38,6 +39,7 @@ export const publicUserSelect = {
   info: true,
   avatar_url: true,
   department: true,
+  department_id: true,
   designation: true,
   salary_basic: true,
   salary_allowance: true,
@@ -68,17 +70,35 @@ export function assertPassword(password: string): void {
   if (password.length < 8 || password.length > 72) {
     throw new HttpError(400, 'Password must be between 8 and 72 characters');
   }
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    throw new HttpError(400, 'Password must include a letter and a number');
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/\d/.test(password)) {
+    throw new HttpError(400, 'Password must include uppercase, lowercase, and a number');
   }
 }
 
 export function assertEmail(email: string): string {
   const normalized = normalizeEmail(email);
   if (!EMAIL_PATTERN.test(normalized) || normalized.length > 254) {
-    throw new HttpError(400, 'A valid email is required');
+    throw new HttpError(400, 'Enter a valid email (e.g. name@company.com)');
   }
   return normalized;
+}
+
+export function requiredEmail(value: unknown, label: string): string {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new HttpError(400, `${label} is required`);
+  }
+  return assertEmail(value);
+}
+
+/** Rejects when another account already uses this login email. */
+export async function assertLoginEmailAvailable(
+  email: string,
+  excludeUserId?: string,
+): Promise<void> {
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing && existing.id !== excludeUserId) {
+    throw new HttpError(409, 'This login email is already in use');
+  }
 }
 
 function optionalText(value: unknown, label: string, max: number): string | null | undefined {
@@ -119,7 +139,7 @@ function uniqueConflict(err: Prisma.PrismaClientKnownRequestError): HttpError {
   if (fields.includes('employee_code')) {
     return new HttpError(409, 'That employee code is already in use');
   }
-  return new HttpError(409, 'An account with that email already exists');
+  return new HttpError(409, 'This login email is already in use');
 }
 
 export async function createAccount(
@@ -140,13 +160,11 @@ export async function createAccount(
     emergency_contact_phone?: unknown;
     joined_on?: unknown;
     info?: unknown;
+    department_id?: unknown;
     department?: unknown;
     designation?: unknown;
     salary_basic?: unknown;
-    salary_allowance?: unknown;
     salary_deduction?: unknown;
-    medical_limit?: unknown;
-    opd_limit?: unknown;
     clock_enabled?: unknown;
     login_enabled?: unknown;
     employee_code?: unknown;
@@ -169,14 +187,14 @@ export async function createAccount(
   }
 
   const email = assertEmail(input.email);
+  await assertLoginEmailAvailable(email);
   if (loginEnabled) assertPassword(input.password as string);
   const fullName = assertPersonName(input.full_name, 'Full name');
   const phone = optionalPhone(input.phone);
-  const secondaryEmail = optionalEmail(input.secondary_email, 'Secondary email') ?? null;
   if (!phone) throw new HttpError(400, 'Phone number is required');
-  if (!secondaryEmail) throw new HttpError(400, 'Secondary email is required');
+  const secondaryEmail = requiredEmail(input.secondary_email, 'Secondary email');
   if (secondaryEmail === email) {
-    throw new HttpError(400, 'Secondary email must be different from the account email');
+    throw new HttpError(400, 'Secondary email must be different from the login email');
   }
   const dateOfBirth = optionalDateOfBirth(input.date_of_birth) ?? null;
   const gender = optionalChoice(input.gender, 'Gender', GENDERS) ?? null;
@@ -185,6 +203,29 @@ export async function createAccount(
     if (!dateOfBirth) throw new HttpError(400, 'Date of birth is required');
     if (!gender) throw new HttpError(400, 'Gender is required');
     if (!idCard) throw new HttpError(400, 'ID card number is required');
+  }
+
+  let department_id: string | null = null;
+  let department: string | null = null;
+  let medical_limit = 0;
+  let opd_limit = 0;
+  if (role === Role.employee || role === Role.dataview) {
+    if (typeof input.department_id !== 'string' || !input.department_id.trim()) {
+      throw new HttpError(400, 'Department is required');
+    }
+    const perks = await perksFromDepartmentId(input.department_id.trim());
+    department_id = perks.department_id;
+    department = perks.department;
+    medical_limit = perks.medical_limit;
+    opd_limit = perks.opd_limit;
+  } else if (typeof input.department_id === 'string' && input.department_id.trim()) {
+    const perks = await perksFromDepartmentId(input.department_id.trim());
+    department_id = perks.department_id;
+    department = perks.department;
+    medical_limit = perks.medical_limit;
+    opd_limit = perks.opd_limit;
+  } else {
+    department = optionalLabel(input.department, 'Department') ?? null;
   }
 
   try {
@@ -215,13 +256,14 @@ export async function createAccount(
           optionalPhone(input.emergency_contact_phone, 'Emergency phone') ?? null,
         joined_on: optionalJoinedOn(input.joined_on) ?? null,
         info: optionalNotes(input.info) ?? null,
-        department: optionalLabel(input.department, 'Department') ?? null,
+        department_id,
+        department,
         designation: optionalLabel(input.designation, 'Designation') ?? null,
         salary_basic: optionalNumber(input.salary_basic, 'Basic salary') ?? 0,
-        salary_allowance: optionalNumber(input.salary_allowance, 'Allowance') ?? 0,
+        salary_allowance: 0,
         salary_deduction: optionalNumber(input.salary_deduction, 'Deduction') ?? 0,
-        medical_limit: optionalNumber(input.medical_limit, 'Medical limit') ?? 0,
-        opd_limit: optionalNumber(input.opd_limit, 'OPD limit') ?? 0,
+        medical_limit,
+        opd_limit,
         clock_enabled:
           input.clock_enabled === undefined ? role !== Role.dataview : Boolean(input.clock_enabled),
       },
@@ -420,6 +462,7 @@ export function toPublicUser(user: User): PublicUser {
     info: user.info,
     avatar_url: user.avatar_url,
     department: user.department,
+    department_id: user.department_id,
     designation: user.designation,
     salary_basic: user.salary_basic,
     salary_allowance: user.salary_allowance,

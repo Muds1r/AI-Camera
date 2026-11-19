@@ -15,7 +15,12 @@ import {
 import { EmptyState, ListRow, MetricStrip, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
 import { DateField } from '@/components/date-field';
-import { documentFileError } from '@/lib/fields';
+import {
+  claimAmountError,
+  documentFileError,
+  overtimeHoursError,
+  requestReasonError,
+} from '@/lib/fields';
 import { usePaged } from '@/lib/use-paged';
 
 type Tab = 'benefits' | 'leave' | 'overtime';
@@ -31,14 +36,16 @@ interface Benefit {
 }
 
 interface Allowance {
-  medical: { limit: number; used: number; remaining: number };
-  opd: { limit: number; used: number; remaining: number };
+  medical: { limit: number; used: number; pending: number; remaining: number };
+  opd: { limit: number; used: number; pending: number; remaining: number };
 }
 
 interface Balance {
   id: string;
   allocated: number;
   used: number;
+  pending: number;
+  remaining: number;
   leave_type: { id: string; name: string; is_paid: boolean };
 }
 
@@ -125,6 +132,17 @@ function RequestsPageContent() {
     event.preventDefault();
     setError('');
     setMessage('');
+    const bucket = allowance?.[kind];
+    const amountProblem = claimAmountError(amount, bucket?.remaining);
+    if (amountProblem) {
+      setError(amountProblem);
+      return;
+    }
+    const reasonProblem = requestReasonError(reason);
+    if (reasonProblem) {
+      setError(reasonProblem);
+      return;
+    }
     try {
       let documentUrl: string | undefined;
       if (file) {
@@ -159,6 +177,15 @@ function RequestsPageContent() {
     event.preventDefault();
     setError('');
     setMessage('');
+    const reasonProblem = requestReasonError(reason);
+    if (reasonProblem) {
+      setError(reasonProblem);
+      return;
+    }
+    if (!start || !end) {
+      setError('Leave start and end dates are required');
+      return;
+    }
     try {
       await apiJson('/api/leave', {
         method: 'POST',
@@ -176,6 +203,16 @@ function RequestsPageContent() {
     event.preventDefault();
     setError('');
     setMessage('');
+    const hoursProblem = overtimeHoursError(otHours);
+    if (hoursProblem) {
+      setError(hoursProblem);
+      return;
+    }
+    const reasonProblem = requestReasonError(reason);
+    if (reasonProblem) {
+      setError(reasonProblem);
+      return;
+    }
     try {
       await apiJson('/api/overtime', {
         method: 'POST',
@@ -225,8 +262,8 @@ function RequestsPageContent() {
                 .filter((item) => item.leave_type.is_paid)
                 .map((item) => ({
                   label: item.leave_type.name,
-                  value: item.allocated - item.used,
-                  hint: `${item.used} used of ${item.allocated}`,
+                  value: item.remaining,
+                  hint: `${item.used} used · ${item.pending} pending of ${item.allocated}`,
                 }))}
             />
           ) : null}
@@ -321,12 +358,12 @@ function RequestsPageContent() {
                 {
                   label: 'Medical remaining',
                   value: allowance.medical.remaining,
-                  hint: `${allowance.medical.used} used of ${allowance.medical.limit}`,
+                  hint: `${allowance.medical.used} used · ${allowance.medical.pending} pending of ${allowance.medical.limit}`,
                 },
                 {
                   label: 'OPD remaining',
                   value: allowance.opd.remaining,
-                  hint: `${allowance.opd.used} used of ${allowance.opd.limit}`,
+                  hint: `${allowance.opd.used} used · ${allowance.opd.pending} pending of ${allowance.opd.limit}`,
                 },
               ]}
             />
@@ -345,10 +382,11 @@ function RequestsPageContent() {
             <input
               className={fieldClass}
               type="number"
-              min="1"
+              min="0.01"
+              step="0.01"
               required
               placeholder="Amount"
-              max={10000000}
+              max={Math.max(0, allowance?.[kind]?.remaining ?? 10000000)}
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
             />

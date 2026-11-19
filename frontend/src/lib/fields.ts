@@ -10,6 +10,9 @@ const PERSON_NAME = /^(?=.*\p{L})[\p{L}][\p{L}\s.'-]{1,79}$/u;
 const LABEL_TEXT = /^(?=.*\p{L})[\p{L}\p{N}][\p{L}\p{N}\s&/.,'-]{1,79}$/u;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** For HTML `pattern` on email inputs (must include @ and a dot in the domain). */
+export const EMAIL_INPUT_PATTERN = String.raw`[^\s@]+@[^\s@]+\.[^\s@]+`;
+
 export function digitsOnly(value: string, max: number) {
   return value.replace(/\D/g, '').slice(0, max);
 }
@@ -53,19 +56,30 @@ export function phoneError(value: string, required: boolean, label = 'Phone numb
 export function emailError(value: string, required: boolean, label = 'Email') {
   const email = value.trim().toLowerCase();
   if (!email) return required ? `${label} is required` : '';
-  if (!EMAIL.test(email) || email.length > 254) return `Enter a valid ${label.toLowerCase()}`;
+  if (!EMAIL.test(email) || email.length > 254) {
+    return `${label} must look like name@company.com (with @ and a dot after it)`;
+  }
   return '';
 }
 
 export function secondaryEmailError(value: string, loginEmail: string, required: boolean) {
-  const message = emailError(value, required, 'Secondary email');
+  const message = emailError(value, required, 'Secondary email (recovery)');
   if (message) return message;
   if (
     value.trim() &&
     loginEmail.trim() &&
     value.trim().toLowerCase() === loginEmail.trim().toLowerCase()
   ) {
-    return 'Secondary email must be different from the account email';
+    return 'Secondary email must be different from the login email';
+  }
+  return '';
+}
+
+export function duplicateLoginEmailError(email: string, knownEmails: readonly string[]) {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return '';
+  if (knownEmails.some((item) => item.trim().toLowerCase() === normalized)) {
+    return 'This login email is already in use';
   }
   return '';
 }
@@ -167,8 +181,8 @@ export function choiceError(
 export function passwordError(value: string, required: boolean) {
   if (!value) return required ? 'Password is required' : '';
   if (value.length < 8 || value.length > 72) return 'Password must be between 8 and 72 characters';
-  if (!/[A-Za-z]/.test(value) || !/\d/.test(value)) {
-    return 'Password must include a letter and a number';
+  if (!/[a-z]/.test(value) || !/[A-Z]/.test(value) || !/\d/.test(value)) {
+    return 'Password must include uppercase, lowercase, and a number';
   }
   return '';
 }
@@ -181,6 +195,37 @@ export function imageFileError(file: File) {
     return 'Picture must be a JPEG, PNG, or WebP image';
   }
   if (file.size > 2 * 1024 * 1024) return 'Picture must be 2 MB or smaller';
+  return '';
+}
+
+export const CLAIM_AMOUNT_MAX = 10_000_000;
+
+export function claimAmountError(value: string, remaining?: number) {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Amount is required';
+  const amount = Number(trimmed);
+  if (!Number.isFinite(amount) || amount <= 0) return 'Amount must be greater than zero';
+  if (amount > CLAIM_AMOUNT_MAX) return 'Amount must be at most 10,000,000';
+  if (remaining !== undefined && amount > remaining) {
+    return 'This amount exceeds your remaining balance';
+  }
+  return '';
+}
+
+export function overtimeHoursError(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return 'Hours are required';
+  const hours = Number(trimmed);
+  if (!Number.isFinite(hours) || hours < 0.5 || hours > 12) {
+    return 'Overtime hours must be between 0.5 and 12';
+  }
+  return '';
+}
+
+export function requestReasonError(value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length < 3) return 'A reason of at least 3 characters is required';
+  if (trimmed.length > 2000) return 'Reason must be at most 2000 characters';
   return '';
 }
 

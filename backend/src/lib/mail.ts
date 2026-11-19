@@ -114,7 +114,26 @@ export type PasswordResetEmail = {
   idempotencyKey?: string;
 };
 
+function passwordResetDevConsole(): boolean {
+  if (process.env.NODE_ENV === 'production') return false;
+  return process.env.MAIL_SEND_IN_DEV !== 'true';
+}
+
+function logPasswordResetToDevConsole(input: PasswordResetEmail): void {
+  console.info(
+    `[mail:dev] Password reset OTP\n` +
+      `  Login email: ${input.loginEmail}\n` +
+      `  Would send to: ${input.to}\n` +
+      `  OTP: ${input.code}`,
+  );
+}
+
 export async function sendPasswordResetEmail(input: PasswordResetEmail): Promise<void> {
+  if (passwordResetDevConsole()) {
+    logPasswordResetToDevConsole(input);
+    return;
+  }
+
   const from = defaultFrom();
   const subject = `${appName()} — password reset code`;
   const text = [
@@ -131,16 +150,7 @@ export async function sendPasswordResetEmail(input: PasswordResetEmail): Promise
   ].join('\n');
 
   if (!resendConfigured() && !smtpConfigured()) {
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        'RESEND_API_KEY or SMTP must be configured in production to send password reset email',
-      );
-    }
-    console.info(
-      `[mail:dev] Password reset code for ${input.loginEmail} → ${input.to}\n` +
-        `Reset code: ${input.code}`,
-    );
-    return;
+    throw new Error('RESEND_API_KEY or SMTP must be configured to send password reset email');
   }
 
   const idempotencyKey =
@@ -152,12 +162,18 @@ export async function sendPasswordResetEmail(input: PasswordResetEmail): Promise
     return;
   }
 
-  await getTransporter().sendMail({
+  const info = await getTransporter().sendMail({
     from,
     to: input.to,
     subject,
     text,
   });
+  const preview = nodemailer.getTestMessageUrl(info);
+  if (preview) {
+    console.info(`[mail:smtp] Password reset sent — preview: ${preview}`);
+  } else {
+    console.info(`[mail:smtp] Password reset sent to ${input.to}`);
+  }
 }
 
 export function isMailConfigured(): boolean {

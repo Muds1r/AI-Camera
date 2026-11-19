@@ -25,8 +25,22 @@ import {
 } from '../lib/notifications';
 import { AuthUser } from '../lib/auth/session';
 import { roleHasPermission, Permission } from '../lib/auth/permissions';
-import { assertEmail, assertPassword, publicUserSelect } from '../lib/auth/users';
+import {
+  assertEmail,
+  assertLoginEmailAvailable,
+  assertPassword,
+  publicUserSelect,
+  requiredEmail,
+} from '../lib/auth/users';
 import { hashPassword } from '../lib/auth/passwords';
+import {
+  assertBenefitWithinBudget,
+  assertPaidLeaveWithinBalance,
+  parseClaimAmount,
+  parseOvertimeHours,
+  pendingLeaveDays,
+} from '../lib/claims';
+import { perksFromDepartmentId } from './departments.service';
 import {
   BLOOD_GROUPS,
   GENDERS,
@@ -595,10 +609,7 @@ export async function submitBenefit(
   if (input.kind !== BenefitKind.medical && input.kind !== BenefitKind.opd) {
     throw new HttpError(400, 'Kind must be medical or opd');
   }
-  const amount = Number(input.amount);
-  if (!Number.isFinite(amount) || amount <= 0 || amount > 10_000_000) {
-    throw new HttpError(400, 'Amount must be greater than zero and at most 10,000,000');
-  }
+  const amount = parseClaimAmount(input.amount);
   if (
     typeof input.reason !== 'string' ||
     input.reason.trim().length < 3 ||
@@ -617,19 +628,7 @@ export async function submitBenefit(
     }
     documentUrl = input.document_url;
   }
-  if (options?.submittedBy) {
-    const owner = await prisma.user.findUnique({ where: { id: userId } });
-    if (!owner) throw new HttpError(404, 'Employee not found');
-    const approved = await prisma.medicalRequest.aggregate({
-      where: { user_id: userId, kind: input.kind, status: MedicalRequestStatus.approved },
-      _sum: { amount: true },
-    });
-    const spent = approved._sum.amount ?? 0;
-    const limit = input.kind === BenefitKind.opd ? owner.opd_limit : owner.medical_limit;
-    if (spent + amount > limit) {
-      throw new HttpError(409, 'This amount exceeds the remaining balance');
-    }
-  }
+  await assertBenefitWithinBudget(userId, input.kind, amount);
   const request = await prisma.medicalRequest.create({
     data: {
       user_id: userId,
@@ -766,14 +765,10 @@ export async function reviewBenefit(
   if (request.status !== MedicalRequestStatus.pending)
     throw new HttpError(409, 'This request has already been reviewed');
   if (status === MedicalRequestStatus.approved) {
-    const approved = await prisma.medicalRequest.aggregate({
-      where: { user_id: owner.id, kind: request.kind, status: MedicalRequestStatus.approved },
-      _sum: { amount: true },
-    });
-    const spent = approved._sum.amount ?? 0;
-    const limit = request.kind === BenefitKind.opd ? owner.opd_limit : owner.medical_limit;
-    if (spent + request.amount > limit)
-      throw new HttpError(409, 'This amount exceeds the remaining balance');
+    if (request.amount <= 0) {
+      throw new HttpError(400, 'Approved claims must have an amount greater than zero');
+    }
+    await assertBenefitWithinBudget(owner.id, request.kind, request.amount, request.id);
   }
   const updated = await prisma.medicalRequest.update({
     where: { id },
@@ -810,32 +805,64 @@ export async function reviewBenefit(
 export async function benefitBalances(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new HttpError(404, 'User not found');
-  const sums = await prisma.medicalRequest.groupBy({
-    by: ['kind'],
-    where: { user_id: userId, status: MedicalRequestStatus.approved },
-    _sum: { amount: true },
-  });
-  const used = Object.fromEntries(sums.map((row) => [row.kind, row._sum.amount ?? 0]));
+  const [approvedRows, pendingRows] = await Promise.all([
+    prisma.medicalRequest.groupBy({
+      by: ['kind'],
+      where: { user_id: userId, status: MedicalRequestStatus.approved },
+      _sum: { amount: true },
+    }),
+    prisma.medicalRequest.groupBy({
+      by: ['kind'],
+      where: { user_id: userId, status: MedicalRequestStatus.pending },
+      _sum: { amount: true },
+    }),
+  ]);
+  const used = Object.fromEntries(approvedRows.map((row) => [row.kind, row._sum.amount ?? 0]));
+  const pending = Object.fromEntries(pendingRows.map((row) => [row.kind, row._sum.amount ?? 0]));
+  const medicalUsed = used.medical ?? 0;
+  const opdUsed = used.opd ?? 0;
+  const medicalPending = pending.medical ?? 0;
+  const opdPending = pending.opd ?? 0;
   return {
     medical: {
       limit: user.medical_limit,
-      used: used.medical ?? 0,
-      remaining: user.medical_limit - (used.medical ?? 0),
+      used: medicalUsed,
+      pending: medicalPending,
+      remaining: user.medical_limit - medicalUsed - medicalPending,
     },
     opd: {
       limit: user.opd_limit,
-      used: used.opd ?? 0,
-      remaining: user.opd_limit - (used.opd ?? 0),
+      used: opdUsed,
+      pending: opdPending,
+      remaining: user.opd_limit - opdUsed - opdPending,
     },
   };
 }
 
 export async function leaveBalances(userId: string) {
   await ensureLeaveBalances(userId);
-  return prisma.leaveBalance.findMany({
-    where: { user_id: userId },
-    include: { leave_type: true },
-    orderBy: { leave_type: { name: 'asc' } },
+  const [balances, pendingRows] = await Promise.all([
+    prisma.leaveBalance.findMany({
+      where: { user_id: userId },
+      include: { leave_type: true },
+      orderBy: { leave_type: { name: 'asc' } },
+    }),
+    prisma.leaveRequest.groupBy({
+      by: ['leave_type_id'],
+      where: { user_id: userId, status: MedicalRequestStatus.pending },
+      _sum: { days: true },
+    }),
+  ]);
+  const pendingByType = Object.fromEntries(
+    pendingRows.map((row) => [row.leave_type_id, row._sum.days ?? 0]),
+  );
+  return balances.map((balance) => {
+    const pending = pendingByType[balance.leave_type_id] ?? 0;
+    return {
+      ...balance,
+      pending,
+      remaining: balance.allocated - balance.used - pending,
+    };
   });
 }
 
@@ -898,12 +925,7 @@ export async function submitLeave(
   const leaveType = await prisma.leaveType.findUnique({ where: { id: input.leave_type_id } });
   if (!leaveType?.is_active) throw new HttpError(404, 'Leave type not found');
   if (leaveType.is_paid) {
-    const balance = await prisma.leaveBalance.findUnique({
-      where: { user_id_leave_type_id: { user_id: userId, leave_type_id: input.leave_type_id } },
-    });
-    if (!balance) throw new HttpError(404, 'Leave type not found');
-    if (balance.allocated - balance.used < days)
-      throw new HttpError(409, 'Not enough leave balance');
+    await assertPaidLeaveWithinBalance(userId, input.leave_type_id, days);
   }
   const request = await prisma.leaveRequest.create({
     data: {
@@ -979,7 +1001,10 @@ export async function reviewLeave(
             },
           },
         });
-        if (!balance || balance.allocated - balance.used < request.days) {
+        if (!balance) throw new HttpError(404, 'Leave type not found');
+        const pending = await pendingLeaveDays(request.user_id, request.leave_type_id, request.id);
+        const available = balance.allocated - balance.used - pending;
+        if (available < request.days) {
           throw new HttpError(409, 'Not enough leave balance');
         }
         await tx.leaveBalance.update({
@@ -1022,10 +1047,7 @@ export async function submitOvertime(
   if (typeof input.work_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(input.work_date)) {
     throw new HttpError(400, 'Overtime date is required');
   }
-  const hours = Number(input.hours);
-  if (!Number.isFinite(hours) || hours < 0.5 || hours > 12) {
-    throw new HttpError(400, 'Overtime hours must be between 0.5 and 12');
-  }
+  const hours = parseOvertimeHours(input.hours);
   if (
     typeof input.reason !== 'string' ||
     input.reason.trim().length < 3 ||
@@ -1312,16 +1334,23 @@ export async function updateEmployment(
       throw new HttpError(403, 'Only a Super Admin can change an email address');
     }
     if (typeof input.email !== 'string') throw new HttpError(400, 'Email is invalid');
-    data.email = assertEmail(input.email);
+    const nextEmail = assertEmail(input.email);
+    await assertLoginEmailAvailable(nextEmail, userId);
+    data.email = nextEmail;
   }
   const accountEmail = typeof data.email === 'string' ? data.email : target.email;
+  const needsRecoveryEmail =
+    target.role === Role.employee || target.role === Role.dataview || target.role === Role.hr;
   if (input.secondary_email !== undefined) {
     if (input.secondary_email === null || input.secondary_email === '') {
+      if (needsRecoveryEmail) {
+        throw new HttpError(400, 'Secondary email is required');
+      }
       data.secondary_email = null;
     } else if (typeof input.secondary_email === 'string') {
-      const secondaryEmail = assertEmail(input.secondary_email);
+      const secondaryEmail = requiredEmail(input.secondary_email, 'Secondary email');
       if (secondaryEmail === accountEmail) {
-        throw new HttpError(400, 'Secondary email must be different from the account email');
+        throw new HttpError(400, 'Secondary email must be different from the login email');
       }
       data.secondary_email = secondaryEmail;
     } else {
@@ -1342,16 +1371,25 @@ export async function updateEmployment(
     optionalPhone(input.emergency_contact_phone, 'Emergency phone'),
   );
   assign('joined_on', optionalJoinedOn(input.joined_on));
-  assign('department', optionalLabel(input.department, 'Department'));
+  if (input.department_id !== undefined) {
+    if (input.department_id === null || input.department_id === '') {
+      data.department = null;
+      data.department_ref = { disconnect: true };
+    } else if (typeof input.department_id === 'string') {
+      const perks = await perksFromDepartmentId(input.department_id.trim());
+      data.department = perks.department;
+      data.medical_limit = perks.medical_limit;
+      data.opd_limit = perks.opd_limit;
+      data.department_ref = { connect: { id: perks.department_id } };
+    } else {
+      throw new HttpError(400, 'Department is invalid');
+    }
+  } else {
+    assign('department', optionalLabel(input.department, 'Department'));
+  }
   assign('designation', optionalLabel(input.designation, 'Designation'));
   assign('info', optionalNotes(input.info));
-  for (const key of [
-    'salary_basic',
-    'salary_allowance',
-    'salary_deduction',
-    'medical_limit',
-    'opd_limit',
-  ] as const) {
+  for (const key of ['salary_basic', 'salary_deduction'] as const) {
     if (input[key] === undefined) continue;
     const parsed = Number(input[key]);
     if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100_000_000) {
@@ -1387,6 +1425,14 @@ export async function updateEmployment(
     (key) => data[key] !== undefined && data[key] !== target[key],
   );
   if (input.is_active !== undefined) data.is_active = Boolean(input.is_active);
+  const resolvedSecondary =
+    data.secondary_email !== undefined ? data.secondary_email : target.secondary_email;
+  if (
+    needsRecoveryEmail &&
+    (resolvedSecondary === null || resolvedSecondary === undefined || resolvedSecondary === '')
+  ) {
+    throw new HttpError(400, 'Secondary email is required');
+  }
   const user = await prisma.user
     .update({ where: { id: userId }, data, select: publicUserSelect })
     .catch((err: unknown) => {
@@ -1401,7 +1447,7 @@ export async function updateEmployment(
         if (fields.includes('id_card')) {
           throw new HttpError(409, 'An account with that ID card number already exists');
         }
-        throw new HttpError(409, 'An account with that email already exists');
+        throw new HttpError(409, 'This login email is already in use');
       }
       throw err;
     });
@@ -1597,13 +1643,8 @@ export async function employmentProfile(actor: AuthUser, userId: string) {
   }
   const target = await prisma.user.findUnique({ where: { id: userId }, select: publicUserSelect });
   if (!target) throw new HttpError(404, 'User not found');
-  await ensureLeaveBalances(userId);
-  const balances = await prisma.leaveBalance.findMany({
-    where: { user_id: userId },
-    include: { leave_type: true },
-    orderBy: { leave_type: { name: 'asc' } },
-  });
-  return { user: target, balances };
+  const [balances, benefits] = await Promise.all([leaveBalances(userId), benefitBalances(userId)]);
+  return { user: target, balances, benefits };
 }
 
 const financeDirectorySelect = {

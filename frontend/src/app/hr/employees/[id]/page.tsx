@@ -44,7 +44,21 @@ interface Balance {
   id: string;
   allocated: number;
   used: number;
+  pending: number;
+  remaining: number;
   leave_type: { code: string; name: string };
+}
+
+interface BenefitBalances {
+  medical: { limit: number; used: number; pending: number; remaining: number };
+  opd: { limit: number; used: number; pending: number; remaining: number };
+}
+
+interface Department {
+  id: string;
+  name: string;
+  medical_limit: number;
+  opd_limit: number;
 }
 
 type Section = 'details' | 'payslip';
@@ -79,6 +93,7 @@ export default function EmployeePage() {
   const [editing, setEditing] = useState(false);
   const [person, setPerson] = useState<SessionUser | null>(null);
   const [balances, setBalances] = useState<Balance[]>([]);
+  const [benefits, setBenefits] = useState<BenefitBalances | null>(null);
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [secondaryEmail, setSecondaryEmail] = useState('');
@@ -91,13 +106,11 @@ export default function EmployeePage() {
   const [joinedOn, setJoinedOn] = useState('');
   const [address, setAddress] = useState('');
   const [info, setInfo] = useState('');
-  const [department, setDepartment] = useState('');
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [departmentId, setDepartmentId] = useState('');
   const [designation, setDesignation] = useState('');
   const [salary, setSalary] = useState('');
-  const [allowance, setAllowance] = useState('');
   const [deduction, setDeduction] = useState('');
-  const [medical, setMedical] = useState('');
-  const [opd, setOpd] = useState('');
   const [clockEnabled, setClockEnabled] = useState(true);
   const [shift, setShift] = useState<'day' | 'night'>('day');
   const [loginEnabled, setLoginEnabled] = useState(true);
@@ -114,9 +127,10 @@ export default function EmployeePage() {
   const [message, setMessage] = useState('');
   const [loadedId, setLoadedId] = useState<string | null>(null);
 
-  function fill(user: SessionUser, nextBalances: Balance[]) {
+  function fill(user: SessionUser, nextBalances: Balance[], nextBenefits?: BenefitBalances | null) {
     setPerson(user);
     setBalances(nextBalances);
+    setBenefits(nextBenefits ?? null);
     setFullName(user.full_name);
     setPhone(user.phone || '');
     setSecondaryEmail(user.secondary_email || '');
@@ -129,13 +143,10 @@ export default function EmployeePage() {
     setJoinedOn(dateInputValue(user.joined_on));
     setAddress(user.address || '');
     setInfo(user.info || '');
-    setDepartment(user.department || '');
+    setDepartmentId(user.department_id || '');
     setDesignation(user.designation || '');
     setSalary(user.salary_basic ? String(user.salary_basic) : '');
-    setAllowance(user.salary_allowance ? String(user.salary_allowance) : '');
     setDeduction(user.salary_deduction ? String(user.salary_deduction) : '');
-    setMedical(user.medical_limit ? String(user.medical_limit) : '');
-    setOpd(user.opd_limit ? String(user.opd_limit) : '');
     setClockEnabled(user.clock_enabled);
     setShift(user.shift || 'day');
     setLoginEnabled(user.login_enabled);
@@ -145,18 +156,28 @@ export default function EmployeePage() {
   }
 
   function loadProfile() {
-    return apiJson<{ user: SessionUser; balances: Balance[] }>(`/api/users/${id}`).then((data) => {
-      fill(data.user, data.balances);
+    return apiJson<{ user: SessionUser; balances: Balance[]; benefits?: BenefitBalances }>(
+      `/api/users/${id}`,
+    ).then((data) => {
+      fill(data.user, data.balances, data.benefits ?? null);
       return data.user;
     });
   }
 
   useEffect(() => {
+    apiJson<{ departments: Department[] }>('/api/company/departments')
+      .then((data) => setDepartments(data.departments))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     let ignore = false;
-    apiJson<{ user: SessionUser; balances: Balance[] }>(`/api/users/${id}`)
+    apiJson<{ user: SessionUser; balances: Balance[]; benefits?: BenefitBalances }>(
+      `/api/users/${id}`,
+    )
       .then((data) => {
         if (!ignore) {
-          fill(data.user, data.balances);
+          fill(data.user, data.balances, data.benefits ?? null);
           setLoadedId(id);
         }
       })
@@ -237,7 +258,6 @@ export default function EmployeePage() {
       emergency_contact_phone: phoneError(emergencyPhone, false, 'Emergency phone'),
       joined_on: joinedOnError(joinedOn),
       address: addressError(address, false),
-      department: labelError(department, 'Department'),
       designation: labelError(designation, 'Designation'),
       info: notesError(info),
     });
@@ -247,6 +267,10 @@ export default function EmployeePage() {
     }
     if (loginEnabled && !person.login_enabled && !loginPassword) {
       setError('Set a password before turning sign-in on');
+      return;
+    }
+    if (!departmentId && (person.role === 'employee' || person.role === 'dataview')) {
+      setError('Choose a department');
       return;
     }
     const amount = (value: string) => (value.trim() ? Number(value) : 0);
@@ -266,13 +290,10 @@ export default function EmployeePage() {
           joined_on: joinedOn,
           address,
           info,
-          department,
+          department_id: departmentId || null,
           designation,
           salary_basic: amount(salary),
-          salary_allowance: amount(allowance),
           salary_deduction: amount(deduction),
-          medical_limit: amount(medical),
-          opd_limit: amount(opd),
           clock_enabled: clockEnabled,
           ...(!person.login_enabled ? { login_enabled: loginEnabled } : {}),
           shift,
@@ -400,10 +421,23 @@ export default function EmployeePage() {
               </section>
               <section className={`${cardClass} grid gap-5 p-6 sm:grid-cols-2 lg:grid-cols-3`}>
                 <Readout label="Basic salary" value={money(person.salary_basic)} />
-                <Readout label="Allowance" value={money(person.salary_allowance)} />
                 <Readout label="Deduction" value={money(person.salary_deduction)} />
-                <Readout label="Medical limit" value={money(person.medical_limit)} />
-                <Readout label="OPD limit" value={money(person.opd_limit)} />
+                <Readout
+                  label="Medical allowance"
+                  value={
+                    benefits
+                      ? `${money(benefits.medical.remaining)} left (${money(benefits.medical.used)} used${benefits.medical.pending > 0 ? `, ${money(benefits.medical.pending)} pending` : ''} of ${money(benefits.medical.limit)})`
+                      : money(person.medical_limit)
+                  }
+                />
+                <Readout
+                  label="OPD allowance"
+                  value={
+                    benefits
+                      ? `${money(benefits.opd.remaining)} left (${money(benefits.opd.used)} used${benefits.opd.pending > 0 ? `, ${money(benefits.opd.pending)} pending` : ''} of ${money(benefits.opd.limit)})`
+                      : money(person.opd_limit)
+                  }
+                />
               </section>
               {balances.length > 0 ? (
                 <section className={`${cardClass} p-6`}>
@@ -412,8 +446,13 @@ export default function EmployeePage() {
                     {balances.map((item) => (
                       <li key={item.id} className="flex justify-between gap-4 py-2 text-sm">
                         <span>{item.leave_type.name}</span>
-                        <span className="text-mute">
-                          {item.used} used of {item.allocated}
+                        <span className="text-mute text-end">
+                          {item.remaining} days left
+                          <span className="block text-xs">
+                            {item.used} used
+                            {item.pending > 0 ? ` · ${item.pending} pending` : ''} of{' '}
+                            {item.allocated}
+                          </span>
                         </span>
                       </li>
                     ))}
@@ -557,12 +596,25 @@ export default function EmployeePage() {
               </label>
               <label className={labelClass}>
                 Department
-                <input
+                <select
                   className={`${fieldClass} mt-1`}
-                  value={department}
-                  onChange={(event) => setDepartment(event.target.value)}
-                />
+                  value={departmentId}
+                  onChange={(event) => setDepartmentId(event.target.value)}
+                >
+                  <option value="">Choose department</option>
+                  {departments.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
               </label>
+              {departments.find((item) => item.id === departmentId) ? (
+                <p className="text-mute text-sm md:col-span-2">
+                  Changing department updates this person&apos;s medical and OPD limits to the
+                  department defaults.
+                </p>
+              ) : null}
               <label className={labelClass}>
                 Designation
                 <input
@@ -590,16 +642,6 @@ export default function EmployeePage() {
                 />
               </label>
               <label className={labelClass}>
-                Allowance
-                <input
-                  className={`${fieldClass} mt-1`}
-                  type="number"
-                  min="0"
-                  value={allowance}
-                  onChange={(event) => setAllowance(event.target.value)}
-                />
-              </label>
-              <label className={labelClass}>
                 Deduction
                 <input
                   className={`${fieldClass} mt-1`}
@@ -607,26 +649,6 @@ export default function EmployeePage() {
                   min="0"
                   value={deduction}
                   onChange={(event) => setDeduction(event.target.value)}
-                />
-              </label>
-              <label className={labelClass}>
-                Medical limit
-                <input
-                  className={`${fieldClass} mt-1`}
-                  type="number"
-                  min="0"
-                  value={medical}
-                  onChange={(event) => setMedical(event.target.value)}
-                />
-              </label>
-              <label className={labelClass}>
-                OPD limit
-                <input
-                  className={`${fieldClass} mt-1`}
-                  type="number"
-                  min="0"
-                  value={opd}
-                  onChange={(event) => setOpd(event.target.value)}
                 />
               </label>
               <label className={labelClass}>

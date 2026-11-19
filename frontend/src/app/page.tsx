@@ -15,8 +15,17 @@ interface DashboardData {
   role: string;
   personal?: {
     salary: { basic: number; allowance: number; net: number } | null;
-    benefits: { medical: { remaining: number }; opd: { remaining: number } } | null;
-    leaves: { allocated: number; used: number; leave_type: { name: string } }[];
+    benefits: {
+      medical: { limit: number; used: number; pending: number; remaining: number };
+      opd: { limit: number; used: number; pending: number; remaining: number };
+    } | null;
+    leaves: {
+      allocated: number;
+      used: number;
+      pending: number;
+      remaining: number;
+      leave_type: { name: string; is_paid: boolean };
+    }[];
     recentMedical: { id: string; kind: string; status: string; amount: number }[];
     recentLeave: { id: string; status: string; days: number; leave_type: { name: string } }[];
   };
@@ -102,25 +111,59 @@ export default function HomePage() {
           <div className="grid items-stretch gap-4 lg:grid-cols-2">
             <section className="flex h-full flex-col gap-3">
               <h2 className="text-display text-ink flex min-h-8 items-center text-base font-semibold">
-                Leave balances
+                Leave &amp; benefits
               </h2>
-              <div className={`${cardClass} flex-1 p-4`}>
+              <div className={`${cardClass} flex-1 space-y-4 p-4`}>
+                {personal?.benefits ? (
+                  <dl className="border-line grid grid-cols-2 gap-3 border-b pb-4">
+                    <div>
+                      <dt className="text-mute text-xs">Medical left</dt>
+                      <dd className="text-ink mt-0.5 text-lg font-semibold tabular-nums">
+                        {money(personal.benefits.medical.remaining)}
+                      </dd>
+                      <dd className="text-mute text-xs">
+                        {money(personal.benefits.medical.used)} used
+                        {personal.benefits.medical.pending > 0
+                          ? ` · ${money(personal.benefits.medical.pending)} pending`
+                          : ''}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-mute text-xs">OPD left</dt>
+                      <dd className="text-ink mt-0.5 text-lg font-semibold tabular-nums">
+                        {money(personal.benefits.opd.remaining)}
+                      </dd>
+                      <dd className="text-mute text-xs">
+                        {money(personal.benefits.opd.used)} used
+                        {personal.benefits.opd.pending > 0
+                          ? ` · ${money(personal.benefits.opd.pending)} pending`
+                          : ''}
+                      </dd>
+                    </div>
+                  </dl>
+                ) : null}
                 {personal && personal.leaves.length > 0 ? (
                   <ul className="divide-line divide-y">
-                    {personal.leaves.map((item) => (
-                      <li
-                        key={item.leave_type.name}
-                        className="flex items-center justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0"
-                      >
-                        <span className="text-ink font-medium">{item.leave_type.name}</span>
-                        <span className="text-mute tabular-nums">
-                          {item.allocated - item.used} left
-                          <span className="text-mute"> · {item.used} used</span>
-                        </span>
-                      </li>
-                    ))}
+                    {personal.leaves
+                      .filter((item) => item.leave_type.is_paid)
+                      .map((item) => (
+                        <li
+                          key={item.leave_type.name}
+                          className="flex items-center justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0"
+                        >
+                          <span className="text-ink font-medium">{item.leave_type.name}</span>
+                          <span className="text-mute text-end tabular-nums">
+                            {item.remaining} days left
+                            <span className="text-mute block text-xs">
+                              {item.used} used
+                              {item.pending > 0 ? ` · ${item.pending} pending` : ''} of{' '}
+                              {item.allocated}
+                            </span>
+                          </span>
+                        </li>
+                      ))}
                   </ul>
-                ) : (
+                ) : personal?.benefits ? null : (
                   <p className="text-mute text-sm">No leave balances yet.</p>
                 )}
               </div>

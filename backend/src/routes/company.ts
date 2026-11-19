@@ -5,6 +5,13 @@ import { Permission } from '../lib/auth/permissions';
 import { requireAuth, requirePermission } from '../middleware/auth';
 import { uploadPicture } from '../lib/auth/avatars';
 import { writeAudit } from '../lib/audit';
+import { routeParam } from '../lib/http';
+import {
+  createDepartment,
+  deleteDepartment,
+  listDepartments,
+  updateDepartment,
+} from '../services/departments.service';
 
 const router = Router();
 const COMPANY_ID = 'default';
@@ -96,6 +103,40 @@ router.post(
     });
     await writeAudit(req.auth!.id, 'company.logo', 'company', COMPANY_ID);
     res.json({ company: present(company) });
+  }),
+);
+
+router.get(
+  '/departments',
+  asyncHandler(async (_req, res) => {
+    res.json({ departments: await listDepartments() });
+  }),
+);
+
+router.post(
+  '/departments',
+  requirePermission(Permission.CompanyManage),
+  asyncHandler(async (req, res) => {
+    const department = await createDepartment(req.auth!, req.body ?? {});
+    res.status(201).json({ department });
+  }),
+);
+
+router.patch(
+  '/departments/:id',
+  requirePermission(Permission.CompanyManage),
+  asyncHandler(async (req, res) => {
+    const department = await updateDepartment(req.auth!, routeParam(req.params.id), req.body ?? {});
+    res.json({ department });
+  }),
+);
+
+router.delete(
+  '/departments/:id',
+  requirePermission(Permission.CompanyManage),
+  asyncHandler(async (req, res) => {
+    await deleteDepartment(req.auth!, routeParam(req.params.id));
+    res.json({ ok: true });
   }),
 );
 

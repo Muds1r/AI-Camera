@@ -1,11 +1,8 @@
 import { MedicalRequestStatus, Role } from '@prisma/client';
+import { assertBenefitWithinBudget } from '../lib/claims';
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http';
-import {
-  notifyBenefitDecided,
-  notifyBenefitFiler,
-  notifyBenefitSubmitted,
-} from '../lib/notifications';
+import { notifyBenefitDecided, notifyBenefitFiler } from '../lib/notifications';
 import { roleHasPermission, Permission } from '../lib/auth/permissions';
 import { AuthUser } from '../lib/auth/session';
 
@@ -36,23 +33,11 @@ export function listMedicalRequests(actor: AuthUser, scope: unknown, behalf: unk
   });
 }
 
-export async function submitMedicalRequest(userId: string, reason: unknown) {
-  if (typeof reason !== 'string' || reason.trim().length < 3 || reason.trim().length > 2000) {
-    throw new HttpError(400, 'A reason between 3 and 2000 characters is required');
-  }
-
-  const request = await prisma.medicalRequest.create({
-    data: { user_id: userId, reason: reason.trim() },
-    include: requestInclude,
-  });
-  await notifyBenefitSubmitted({
-    actorId: userId,
-    requesterName: request.requester.full_name,
-    kind: request.kind,
-    amount: request.amount,
-    reason: request.reason,
-  });
-  return request;
+export async function submitMedicalRequest(_userId: string, _reason: unknown) {
+  throw new HttpError(
+    400,
+    'Use POST /api/benefits with kind, amount, and reason to submit a medical or OPD claim',
+  );
 }
 
 export async function reviewMedicalRequest(
@@ -91,6 +76,12 @@ export async function reviewMedicalRequest(
   }
   if (request.status !== MedicalRequestStatus.pending) {
     throw new HttpError(409, 'This request has already been reviewed');
+  }
+  if (status === MedicalRequestStatus.approved) {
+    if (request.amount <= 0) {
+      throw new HttpError(400, 'Approved claims must have an amount greater than zero');
+    }
+    await assertBenefitWithinBudget(request.user_id, request.kind, request.amount, request.id);
   }
 
   const updated = await prisma.medicalRequest.update({

@@ -16,7 +16,7 @@ import {
 } from '@/components/page-frame';
 import { Badge, ConfirmDialog, EmptyState, Notice, Pagination } from '@/components/widgets';
 import { apiJson } from '@/lib/api';
-import { documentFileError } from '@/lib/fields';
+import { claimAmountError, documentFileError, requestReasonError } from '@/lib/fields';
 import { usePaged } from '@/lib/use-paged';
 
 type Tab = 'medical' | 'opd';
@@ -118,6 +118,16 @@ function FinanceClaimsContent() {
       setError('Choose the employee this claim is for');
       return;
     }
+    const amountProblem = claimAmountError(amount);
+    if (amountProblem) {
+      setError(amountProblem);
+      return;
+    }
+    const reasonProblem = requestReasonError(reason);
+    if (reasonProblem) {
+      setError(reasonProblem);
+      return;
+    }
     if (file) {
       const fileProblem = documentFileError(file);
       if (fileProblem) {
@@ -159,6 +169,16 @@ function FinanceClaimsContent() {
     event.preventDefault();
     setError('');
     setMessage('');
+    const amountProblem = claimAmountError(ownAmount);
+    if (amountProblem) {
+      setError(amountProblem);
+      return;
+    }
+    const reasonProblem = requestReasonError(ownReason);
+    if (reasonProblem) {
+      setError(reasonProblem);
+      return;
+    }
     if (ownFile) {
       const fileProblem = documentFileError(ownFile);
       if (fileProblem) {
@@ -274,8 +294,10 @@ function FinanceClaimsContent() {
         </select>
         <input
           className={fieldClass}
+          type="number"
+          min="0.01"
+          step="0.01"
           required
-          inputMode="decimal"
           placeholder="Amount"
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
@@ -309,8 +331,10 @@ function FinanceClaimsContent() {
         </p>
         <input
           className={fieldClass}
+          type="number"
+          min="0.01"
+          step="0.01"
           required
-          inputMode="decimal"
           placeholder="Amount"
           value={ownAmount}
           onChange={(event) => setOwnAmount(event.target.value)}
@@ -337,7 +361,7 @@ function FinanceClaimsContent() {
 
       {ownClaims.length > 0 ? (
         <ul className="divide-line divide-y">
-          {ownClaims.map((claim) => (
+          {ownPage.slice.map((claim) => (
             <li key={claim.id} className="flex items-center justify-between gap-3 py-2 text-sm">
               <span>
                 Your claim · {claim.amount}
@@ -347,6 +371,13 @@ function FinanceClaimsContent() {
             </li>
           ))}
         </ul>
+      ) : null}
+      {ownPage.showPager ? (
+        <Pagination
+          page={ownPage.page}
+          totalPages={ownPage.totalPages}
+          onChange={ownPage.setPage}
+        />
       ) : null}
 
       <div className="flex flex-wrap gap-2">
